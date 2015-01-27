@@ -711,7 +711,7 @@ SUBROUTINE MDIO_SetOutParam(OutList, p, other, y, ErrStat, ErrMsg )
     p%OutParam(I)%Name  = OutListTmp
     CALL Conv2UC(OutListTmp)       ! convert to all uppercase for string matching purposes
 
-    Ch = 0  ! not really using this yet
+    !Ch = 0  ! not really using this
     NextNum = SCAN( OutListTmp , '1234567890' )
 
     ! process each requested output
@@ -719,7 +719,7 @@ SUBROUTINE MDIO_SetOutParam(OutList, p, other, y, ErrStat, ErrMsg )
       p%OutParam(I)%OType = 1                ! line object type
       p%OutParam(I)%QType = Ten              ! tension quantity type
       p%OutParam(I)%Units = UnitList(Ten)    ! set units according to QType
-      READ (OutListTmp(Ch:),*) ID
+      READ (OutListTmp(:),*) ID
       p%OutParam(I)%ObjID =  ID
       p%OutParam(I)%NodeID =  other%LineList(ID)%N  ! line type
   ! ELSE IF ...
