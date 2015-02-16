@@ -192,7 +192,7 @@ PROGRAM Main
 
       ! Matt: I haven't figured out the above yet, but I'll move the fairlead positions manually here >>>>>>>>>>>>>>>>
       DO J=1,p_MD%NFairs
-        MD_Input(1)%PtFairleadDisplacement%Position(1,J) = 10.0*sin(t_global*Pi*0.2) ! move fairleads sinusoidally in x
+        MD_Input(1)%PtFairleadDisplacement%TranslationDisp(1,J) = 10.0*sin(t_global*Pi*0.2) ! move fairleads sinusoidally in x
         MD_Input(1)%PtFairleadDisplacement%TranslationVel(1,J) = Pi*2.0*cos(t_global*Pi*0.2) ! adjust fairlead x velocity accordingly
       END DO
       ! lazy limitation: the above moves each fairlead's x coordinate about zero <<<

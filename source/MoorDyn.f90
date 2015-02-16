@@ -66,7 +66,7 @@ CONTAINS
       ! -------------------------------------------------------------------------------------------
       CALL MDIO_ReadInput(InitInp, p, other, ErrStat2, ErrMsg2)
 
-      CALL SetErrStat ( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'MD_Init' ) 		! should I use this with all calls???
+      CALL SetErrStat ( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'MD_Init' ) 		! should I use this with all calls??? <<<<<<<<<<
       IF ( ErrStat >= AbortErrLev ) THEN
          !CALL CleanUp()
          RETURN
@@ -74,7 +74,10 @@ CONTAINS
 
 
       ! process the OutList array and set up the index arrays for the requested output quantities
-      CALL MDIO_SetOutParam(InitInp%OutList, p, other, y, ErrStat, ErrMsg )
+      CALL MDIO_ProcessOutList(InitInp%OutList, p, other, y, ErrStat2, ErrMsg2 )
+      IF ( ErrStat2 >= ErrID_None) THEN
+        CALL WrScr(ErrMsg2)
+      END IF
       IF ( ErrStat >= AbortErrLev ) THEN
          RETURN
       END IF
@@ -288,7 +291,7 @@ CONTAINS
       DO J = 1, N-1
         DO K = 1, 3
           x%states(other%LineStateIndList(I) + 3*N-3 + 3*J-3 + K-1 ) = other%LineList(I)%r(K,J) ! assign position
-          x%states(other%LineStateIndList(I) +       + 3*J-3 + K-1 ) = 0.0_ReKi ! assign velocities (of zero)
+          x%states(other%LineStateIndList(I)         + 3*J-3 + K-1 ) = 0.0_ReKi ! assign velocities (of zero)
         END DO
       END DO
 
@@ -404,6 +407,7 @@ CONTAINS
     ! Give the program description (name, version number, date)
     InitOut%Ver = ProgDesc('MoorDyn',TRIM(InitOut%version),TRIM(InitOut%compilingData)) ! rhis is a duplicate of above
 
+    print *, 'initialized with p dt of ', p%dt, ' and p%dtcoupling of ', p%dtCoupling
 
     CALL WrScr( 'Done MD_Init' )
 
@@ -446,16 +450,14 @@ CONTAINS
     ! create space for arrays/meshes in u_interp
     CALL MD_CopyInput(u(1), u_interp, MESH_NEWCOPY, ErrStat, ErrMsg)
     CALL MD_Input_ExtrapInterp(u, utimes, u_interp, t, ErrStat, ErrMsg)
-    !mth: I don't know what this is but it seems cool!
+    ! good enough for now?
 
 
     !-------------------------------------------------------------------------------
     ! go through fairleads and apply motions from driver
     DO I = 1, p%NFairs
       DO J = 1,3
-
-        other%ConnectList(other%FairIdList(I))%r(J) =  u_interp%PtFairleadDisplacement%Position(J,I) ! assign fairlead position
-       !other%ConnectList(other%FairIdList(I))%r(J) =  u_interp%PtFairleadDisplacement%TranslationDisp(J,I) ! is this the same as above?
+        other%ConnectList(other%FairIdList(I))%r(J) =  u_interp%PtFairleadDisplacement%TranslationDisp(J,I) ! is this the same as above?
 
         other%ConnectList(other%FairIdList(I))%rd(J) =  u_interp%PtFairleadDisplacement%TranslationVel(J,I) ! assign fairlead velocity
 
@@ -463,12 +465,10 @@ CONTAINS
     END DO  ! I
 
 
-
     !-------------------------------------------------------------------------------
-    ! loop through mooring model time steps
-    DO I = 1, p%Ndt
-      CALL TimeStep ( t2, p%dtCoupling, u_interp, p, x, xd, z, other, ErrStat, ErrMsg )
-    END DO ! I
+    ! call function that loops through mooring model time steps
+
+    CALL TimeStep ( t2, p%dtCoupling, u_interp, p, x, xd, z, other, ErrStat, ErrMsg )
 
 
 
