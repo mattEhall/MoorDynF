@@ -466,9 +466,9 @@ CONTAINS
 
     !-------------------------------------------------------------------------------
     ! loop through mooring model time steps
-    DO I = 1, p%Ndt
+    ! DO I = 1, p%Ndt  <<< the looping through mooring time steps is done within TimeStep()!
       CALL TimeStep ( t2, p%dtCoupling, u_interp, p, x, xd, z, other, ErrStat, ErrMsg )
-    END DO ! I
+    ! END DO ! I
 
 
 
