@@ -1,0 +1,14 @@
+OutDir = 'C:\Users\bjonkman\Documents\DATA\DesignCodes\miscellaneous\nwtc_subs\IVF Project\Test_NWTC_Library';
+
+Mod1_I = [OutDir filesep 'Mesh1_Input.bin'];
+Mod2_I = [OutDir filesep 'Mesh2_Input.bin'];
+Mod1_O = [OutDir filesep 'Mesh1_Output.bin'];
+Mod2_O = [OutDir filesep 'Mesh2_Output.bin'];
+
+PlotFASTMesh( Mod1_I )
+PlotFASTMesh( Mod2_I )
+PlotFASTMesh( Mod1_O )
+PlotFASTMesh( Mod2_O )
+
+%%
+PlotFASTIOMeshes( )

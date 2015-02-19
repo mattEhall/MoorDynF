@@ -1,0 +1,15 @@
+OutDir = 'C:\Users\bjonkman\Documents\DATA\DesignCodes\miscellaneous\nwtc_subs\IVF Project\Test_NWTC_Library';
+OutDir = '.';
+
+Mesh1_Input = [OutDir filesep 'Mesh1_Input.bin'];
+Mesh2_Input = [OutDir filesep 'Mesh2_Input.bin'];
+Mesh1_Output = [OutDir filesep 'Mesh1_Output.bin'];
+Mesh2_Output = [OutDir filesep 'Mesh2_Output.bin'];
+%%
+% PlotFASTMesh( Mesh1_Input )
+% PlotFASTMesh( Mesh2_Input )
+% PlotFASTMesh( Mesh1_Output )
+% PlotFASTMesh( Mesh2_Output )
+
+%%
+[Mesh1_I,Mesh1_O,Mesh2_I,Mesh2_O]=PlotFASTIOMeshes( Mesh1_Input, Mesh1_Output, Mesh2_Input, Mesh2_Output );
