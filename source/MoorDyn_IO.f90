@@ -964,52 +964,50 @@ END SUBROUTINE MDIO_OpenOutput
 !====================================================================================================
 
 
-!====================================================================================================
-SUBROUTINE MDIO_CloseOutput ( p, ErrStat, ErrMsg )
-! This function cleans up after running the MoorDyn output module. It closes the output file,
-! releases memory, and resets the number of outputs requested to 0.
-!----------------------------------------------------------------------------------------------------
+   !====================================================================================================
+   SUBROUTINE MDIO_CloseOutput ( p, ErrStat, ErrMsg )
+      ! This function cleans up after running the MoorDyn output module.
+      ! It closes the output file and releases memory.
 
-         ! Passed variables
-
-   TYPE(MD_ParameterType),  INTENT( INOUT )  :: p                    ! data for this instance of the floating platform module
-   INTEGER,                       INTENT(   OUT ) :: ErrStat              ! a non-zero value indicates an error occurred
-   CHARACTER(*),                  INTENT(   OUT ) :: ErrMsg               ! Error message if ErrStat /= ErrID_None
-
-!      ! Internal variables
-   LOGICAL                               :: Err
-   INTEGER(IntKi)       :: I  ! generic counter
-
-   !-------------------------------------------------------------------------------------------------
-   ! Initialize error information
-   !-------------------------------------------------------------------------------------------------
-   ErrStat = 0
-   ErrMsg  = ""
-
-   Err     = .FALSE.
-
-   !-------------------------------------------------------------------------------------------------
-   ! Close our output file
-   !-------------------------------------------------------------------------------------------------
-   CLOSE( UnOutFile, IOSTAT = ErrStat )
-   IF ( ErrStat /= 0 ) Err = .TRUE.
-
-  ! also close line output files
-  DO I=1,p%NLines
-       CLOSE( UnLineOuts(I), IOSTAT = ErrStat )
-       IF ( ErrStat /= 0 ) Err = .TRUE.
-  END DO
+      TYPE(MD_ParameterType),  INTENT( INOUT )  :: p                    ! data for this instance of the floating platform module
+      INTEGER,                       INTENT(   OUT ) :: ErrStat              ! a non-zero value indicates an error occurred
+      CHARACTER(*),                  INTENT(   OUT ) :: ErrMsg               ! Error message if ErrStat /= ErrID_None
 
 
-   !-------------------------------------------------------------------------------------------------
-   ! Make sure ErrStat is non-zero if an error occurred
-   !-------------------------------------------------------------------------------------------------
-   IF ( Err ) ErrStat = ErrID_Fatal
+      INTEGER(IntKi)       :: I  ! generic counter
 
-   RETURN
 
-END SUBROUTINE MDIO_CloseOutput
-!====================================================================================================
+      ErrStat = 0
+      ErrMsg  = ""
+
+
+      ! close main MoorDyn output file
+      CLOSE( UnOutFile, IOSTAT = ErrStat )
+         IF ( ErrStat /= 0 ) THEN
+            ErrMsg = 'Error closing output file'
+            CALL WrScr(ErrMsg)
+         END IF
+
+      ! close individual line output files
+      DO I=1,p%NLines
+         CLOSE( UnLineOuts(I), IOSTAT = ErrStat )
+            IF ( ErrStat /= 0 ) THEN
+               ErrMsg = 'Error closing line output file'
+               CALL WrScr(ErrMsg)
+            END IF
+      END DO
+
+      ! deallocate output arrays
+      IF (ALLOCATED(UnLineOuts)) THEN
+         DEALLOCATE(UnLineOuts)
+      ENDIF
+      IF (ALLOCATED(LineWriteOutputs)) THEN
+         DEALLOCATE(LineWriteOutputs)
+      ENDIF
+
+
+   END SUBROUTINE MDIO_CloseOutput
+   !====================================================================================================
 
 
   !====================================================================================================
