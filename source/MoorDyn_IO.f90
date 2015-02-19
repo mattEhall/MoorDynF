@@ -719,7 +719,7 @@ SUBROUTINE MDIO_SetOutParam(OutList, p, other, y, ErrStat, ErrMsg )
       p%OutParam(I)%OType = 1                ! line object type
       p%OutParam(I)%QType = Ten              ! tension quantity type
       p%OutParam(I)%Units = UnitList(Ten)    ! set units according to QType
-      READ (OutListTmp(:),*) ID
+      READ (OutListTmp(NextNum:),*) ID
       p%OutParam(I)%ObjID =  ID
       p%OutParam(I)%NodeID =  other%LineList(ID)%N  ! line type
   ! ELSE IF ...
