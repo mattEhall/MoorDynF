@@ -399,30 +399,6 @@ PROGRAM Main
    END SUBROUTINE CheckError
 
 
-
-  ! computes L2 norm, i.e. magnitude
-  !-----------------------------------------------------------------------
-  FUNCTION Norm2( A )
-    Real(ReKi)  :: Norm2
-    Real(ReKi)  :: A(:)
-
-    Real(ReKi)     :: Sum1
-    Integer(intKi) :: J
-
-
-    Sum1 = 0.0_ReKi
-
-    DO J=1,size(A)
-      print *, 'about to check index ', J
-      Sum1 = Sum1 + A(J)*A(J)
-    END DO
-
-    Norm2 = sqrt(Sum1)
-
-	END FUNCTION Norm2
-
-
-
 END PROGRAM Main
 
 

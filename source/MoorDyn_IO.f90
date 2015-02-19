@@ -216,7 +216,7 @@ CONTAINS
 
      IF ( InitInp%Echo ) THEN
 
-        EchoFile = TRIM(FileName)//'.echo' 			! open an echo file for writing
+        EchoFile = TRIM(FileName)//'.ech'                      ! open an echo file for writing
         CALL GetNewUnit( UnEc )
         CALL OpenEcho ( UnEc, EchoFile, ErrStat, ErrMsg )
         IF ( ErrStat /= ErrID_None ) THEN
@@ -225,7 +225,7 @@ CONTAINS
            RETURN
         END IF
 
-        REWIND(UnIn) 		! rewind to start of input file to re-read the first few lines
+        REWIND(UnIn)      ! rewind to start of input file to re-read the first few lines
 
         CALL ReadCom( UnIn, FileName, 'MoorDyn input file header line 1', ErrStat, ErrMsg, UnEc )
 
@@ -719,7 +719,7 @@ SUBROUTINE MDIO_SetOutParam(OutList, p, other, y, ErrStat, ErrMsg )
       p%OutParam(I)%OType = 1                ! line object type
       p%OutParam(I)%QType = Ten              ! tension quantity type
       p%OutParam(I)%Units = UnitList(Ten)    ! set units according to QType
-      READ (OutListTmp(NextNum:),*) ID
+      READ (OutListTmp(:),*) ID
       p%OutParam(I)%ObjID =  ID
       p%OutParam(I)%NodeID =  other%LineList(ID)%N  ! line type
   ! ELSE IF ...
@@ -1050,7 +1050,7 @@ SUBROUTINE MDIO_WriteOutputs( Time, p, other, y, ErrStat, ErrMsg )
     ELSE IF (p%OutParam(I)%OType == 1) THEN  ! if dealing with a Line output
       IF (p%OutParam(I)%QType == Ten) THEN  ! tension
         ! this needs to be corrected!!! <<<
-        MDWrOutput(I) = Norm2(other%LineList(I)%T(:,p%OutParam(I)%NodeID))  ! this isn't quite right, since it's segment tension...
+        MDWrOutput(I) = TwoNorm(other%LineList(I)%T(:,p%OutParam(I)%NodeID))  ! this isn't quite right, since it's segment tension...
       ELSE
         MDWrOutput(I) = 0.0
         ErrStat = ErrID_Warn
@@ -1097,29 +1097,6 @@ SUBROUTINE MDIO_WriteOutputs( Time, p, other, y, ErrStat, ErrMsg )
 
   END DO ! I
 
-
-
-CONTAINS
-
-  ! computes L2 norm, i.e. magnitude
-  !-----------------------------------------------------------------------
-  FUNCTION Norm2( A )
-    Real(ReKi)  :: Norm2
-    Real(ReKi)  :: A(:)
-
-    Real(ReKi)     :: Sum1
-    Integer(intKi) :: J
-
-
-    Sum1 = 0.0_ReKi
-
-    DO J=1,size(A)
-      Sum1 = Sum1 + A(J)*A(J)
-    END DO
-
-    Norm2 = sqrt(Sum1)
-
-	END FUNCTION Norm2
 
 
 END SUBROUTINE MDIO_WriteOutputs

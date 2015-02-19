@@ -29,7 +29,7 @@ CONTAINS
       TYPE(MD_ConstraintStateType), INTENT(  OUT)  :: z           ! INTENT( OUT) : Initial guess of the constraint states
       TYPE(MD_OtherStateType),      INTENT(  OUT)  :: other       ! INTENT( OUT) : Initial other/optimization states
       TYPE(MD_OutputType),          INTENT(  OUT)  :: y           ! INTENT( OUT) : Initial system outputs (outputs are not calculated; only the output mesh is initialized)
-      REAL(DbKi),                   INTENT(INOUT)  :: DTcoupling    ! Coupling interval in seconds: the rate that Output is the actual coupling interval
+      REAL(DbKi),                   INTENT(INOUT)  :: DTcoupling  ! Coupling interval in seconds: the rate that Output is the actual coupling interval
       TYPE(MD_InitOutputType),      INTENT(INOUT)  :: InitOut     ! Output for initialization routine
       INTEGER(IntKi),               INTENT(  OUT)  :: ErrStat     ! Error status of the operation
       CHARACTER(*),                 INTENT(  OUT)  :: ErrMsg      ! Error message if ErrStat /= ErrID_None
@@ -66,7 +66,7 @@ CONTAINS
       ! -------------------------------------------------------------------------------------------
       CALL MDIO_ReadInput(InitInp, p, other, ErrStat2, ErrMsg2)
 
-      CALL SetErrStat ( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'MD_Init' ) 		! should I use this with all calls???
+      CALL SetErrStat ( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'MD_Init' )         ! should I use this with all calls???
       IF ( ErrStat >= AbortErrLev ) THEN
          !CALL CleanUp()
          RETURN
@@ -238,9 +238,9 @@ CONTAINS
         other%ConnectList(I)%rd(2) = 0.0_ReKi
         other%ConnectList(I)%rd(3) = 0.0_ReKi
 
-!        r[0] = TransMat[0]*conX + TransMat[1]*conY + TransMat[2]*conZ + pX[0];	// x
-!        r[1] = TransMat[3]*conX + TransMat[4]*conY + TransMat[5]*conZ + pX[1];	// y
-!        r[2] = TransMat[6]*conX + TransMat[7]*conY + TransMat[8]*conZ + pX[2];	// z
+!        r[0] = TransMat[0]*conX + TransMat[1]*conY + TransMat[2]*conZ + pX[0];  // x
+!        r[1] = TransMat[3]*conX + TransMat[4]*conY + TransMat[5]*conZ + pX[1];  // y
+!        r[2] = TransMat[6]*conX + TransMat[7]*conY + TransMat[8]*conZ + pX[2];  // z
 !
 !        for (int I=0; I<3; I++) rd(I) = 0.0;
       ELSE IF ( other%ConnectList(I)%TypeNum == 2 ) THEN !connect
@@ -288,7 +288,7 @@ CONTAINS
       DO J = 1, N-1
         DO K = 1, 3
           x%states(other%LineStateIndList(I) + 3*N-3 + 3*J-3 + K-1 ) = other%LineList(I)%r(K,J) ! assign position
-          x%states(other%LineStateIndList(I) +       + 3*J-3 + K-1 ) = 0.0_ReKi ! assign velocities (of zero)
+          x%states(other%LineStateIndList(I) +         3*J-3 + K-1 ) = 0.0_ReKi ! assign velocities (of zero)
         END DO
       END DO
 
@@ -341,7 +341,7 @@ CONTAINS
 
     !  print *, 'Time step ', I, ', t = ', t
 
-      !double t = iic*ICdt;			// IC gen time (s).
+      !double t = iic*ICdt;         // IC gen time (s).
 
       !// loop through line integration time steps
       !for (double ts=t; ts<=t+ICdt-dts; ts+=dts)
@@ -357,7 +357,7 @@ CONTAINS
       DO J = 1, p%NFairs
         FairTensIC(J,3) = FairTensIC(J,2)
         FairTensIC(J,2) = FairTensIC(J,1)
-        FairTensIC(J,1) = Norm2(other%ConnectList(other%FairIdList(J))%Ftot(:))
+        FairTensIC(J,1) = TwoNorm(other%ConnectList(other%FairIdList(J))%Ftot(:))
 
     !    print *, "   t = ", t , " s, tension at Node " , other%FairIdList(J), " is ", FairTensIC(J,1)
 
@@ -383,7 +383,7 @@ CONTAINS
     END DO ! I ... looping through time steps
 
 
-	  ! UNboost drag coefficient of each line type
+     ! UNboost drag coefficient of each line type
     DO I = 1, p%NTypes
       other%LineTypeList(I)%Cdn = other%LineTypeList(I)%Cdn / InitInp%CdScaleIC
       other%LineTypeList(I)%Cdt = other%LineTypeList(I)%Cdt / InitInp%CdScaleIC
@@ -402,7 +402,7 @@ CONTAINS
     p%dtCoupling = DTcoupling  ! not sure if this is "proper"  store coupling time step for use in updatestates
 
     ! Give the program description (name, version number, date)
-    InitOut%Ver = ProgDesc('MoorDyn',TRIM(InitOut%version),TRIM(InitOut%compilingData)) ! rhis is a duplicate of above
+    !InitOut%Ver = ProgDesc('MoorDyn',TRIM(InitOut%version),TRIM(InitOut%compilingData)) ! rhis is a duplicate of above
 
 
     CALL WrScr( 'Done MD_Init' )
@@ -433,15 +433,11 @@ CONTAINS
     INTEGER(IntKi)  :: K ! counter
 
     TYPE(MD_InputType)         :: u_interp  !
-    INTEGER(IntKi)             :: nTime
 
     REAL(ReKi) :: t2  ! why did I do this?
 
 
-    nTime = size(u) ! the number of times of input data provided???
-
     t2 = real(t, ReKi)
-
 
     ! create space for arrays/meshes in u_interp
     CALL MD_CopyInput(u(1), u_interp, MESH_NEWCOPY, ErrStat, ErrMsg)
@@ -492,7 +488,7 @@ CONTAINS
 
   !==========   MD_CalcOutput   ======     <---------------------------------------------------------------+
   SUBROUTINE MD_CalcOutput( t, u, p, x, xd, z, other, y, ErrStat, ErrMsg )
-    REAL(DbKi)                     , INTENT(INOUT) :: t
+    REAL(DbKi)                     , INTENT(IN   ) :: t
     TYPE( MD_InputType )           , INTENT(IN   ) :: u       ! INTENT(IN   )
     TYPE( MD_ParameterType )       , INTENT(IN   ) :: p       ! INTENT(IN   )
     TYPE( MD_ContinuousStateType ) , INTENT(IN   ) :: x       ! INTENT(IN   )
@@ -654,16 +650,18 @@ CONTAINS
 
       INTEGER(IntKi)                     :: I ! index
 
+      ErrStat = ErrID_None
+      ErrMsg  = ""
 
-      CALL RHSmaster(X, F, t)	 								!f0 = f ( t, x0 );
+      CALL RHSmaster(X, F, t)                         !f0 = f ( t, x0 );
 
       DO I = 1, size(X)
-        X(I) = X(I) + 0.5*dt*F(I) 						!x1 = x0 + dt*f0/2.0;
+        X(I) = X(I) + 0.5*dt*F(I)                  !x1 = x0 + dt*f0/2.0;
       END DO
 
       !time = t + dt/2.0
 
-      CALL RHSmaster(X, F, (t + 0.5*dt) )					!f1 = f ( t1, x1 );
+      CALL RHSmaster(X, F, (t + 0.5*dt) )             !f1 = f ( t1, x1 );
 
       DO I = 1, size(X)
         X(I) = X(I) + dt*F(I)
@@ -781,7 +779,7 @@ CONTAINS
         DO J = 1, 3
           Sum1 = Sum1 + (Line%r(J,I+1) - Line%r(J,I))*(Line%r(J,I+1) - Line%r(J,I))
         END DO
-        Line%lstr(I) = sqrt(Sum1)   	                          ! stretched segment length
+        Line%lstr(I) = sqrt(Sum1)                                ! stretched segment length
 
  !   print *, '  lstr() is ', Line%lstr(I)
 
@@ -789,9 +787,9 @@ CONTAINS
         DO J = 1, 3
           Sum1 = Sum1 + (Line%r(J,I+1) - Line%r(J,I))*(Line%rd(J,I+1) - Line%rd(J,I))
         END DO
-        Line%lstrd(I) = Sum1/Line%lstr(I) 	                    ! strain rate of segment
+        Line%lstrd(I) = Sum1/Line%lstr(I)                        ! strain rate of segment
 
-    !    Line%V(I) = Pi/4.0 * d*d*Line%l(I)		!volume attributed to segment
+    !    Line%V(I) = Pi/4.0 * d*d*Line%l(I)     !volume attributed to segment
       END DO
 
       !calculate unit tangent vectors (q) for each node (including ends)
@@ -884,8 +882,8 @@ CONTAINS
         SumSqVp = 0.0_ReKi                                         ! start sums of squares at zero
         SumSqVq = 0.0_ReKi
         DO J = 1, 3
-          Vq(J) = DotProd( Vi , Line%q(:,I) ) * Line%q(J,I); 	! tangential relative flow component
-          Vp(J) = Vi(J) - Vq(J)                     					! transverse relative flow component
+          Vq(J) = DOT_PRODUCT( Vi , Line%q(:,I) ) * Line%q(J,I);   ! tangential relative flow component
+          Vp(J) = Vi(J) - Vq(J)                                    ! transverse relative flow component
           SumSqVq = SumSqVq + Vq(J)*Vq(J)
           SumSqVp = SumSqVp + Vp(J)*Vp(J)
         END DO
@@ -960,7 +958,7 @@ CONTAINS
           END DO ! K
 
           ! update states
-          Xd(3*N-3 + 3*I-3 + J) = X(3*I-3 + J);    	  ! dxdt = V  (velocities)
+          Xd(3*N-3 + 3*I-3 + J) = X(3*I-3 + J);         ! dxdt = V  (velocities)
           Xd(        3*I-3 + J) = Sum1                ! dVdt = RHS * A  (accelerations)
         END DO ! J
       END DO  ! I
@@ -1278,7 +1276,7 @@ CONTAINS
 
   !      }
   !      else
-  !      {	! otherwise just stretch the nodes between the endpoints linearly and hope for the best
+  !      {  ! otherwise just stretch the nodes between the endpoints linearly and hope for the best
           print *, 'Catenary IC generation failed so using straight-line approach instead.'
 
            DO J = 0,Line%N ! Loop through all nodes per line where the line position and tension can be output
@@ -1843,22 +1841,6 @@ CONTAINS
   ! ============ below are some math convenience functions ===============
   ! should add error checking if I keep these, but hopefully there are existing NWTCLib functions to replace them
 
-  ! simple convenience function for identity matrix
-  !-----------------------------------------------------------------------
-!  FUNCTION Eye( I, J )
-!    Integer(IntKi)   :: Eye
-!    Integer(IntKi)   :: I
-!    Integer(IntKi)   :: J
-!
-!    IF (I == J) THEN
-!      Eye = 1
-!    ELSE
-!      Eye = 0
-!    END IF
-!
-!  END FUNCTION Eye
-
-
   ! return unit vector (u) in direction from r1 to r2
   !-----------------------------------------------------------------------
   SUBROUTINE UnitVector( u, r1, r2 )
@@ -1866,20 +1848,17 @@ CONTAINS
     REAL(ReKi), INTENT(IN)    :: r1(:)
     REAL(ReKi), INTENT(IN)    :: r2(:)
 
-    REAL(ReKi)               :: SumSq = 0.0
     REAL(ReKi)               :: Length
-    INTEGER(IntKi)            :: J
 
-    DO J = 1, 3
-      SumSq = SumSq + (r2(J) - r1(J))*(r2(J) - r1(J))
-    END DO
+    u = r2 - r1    
+    Length = TwoNorm(u) 
 
-    Length = sqrt(SumSq)
+    if ( .NOT. EqualRealNos(length, 0.0_ReKi ) ) THEN
+      u = u / Length
+    END IF
+    
 
-    DO J = 1,3
-      u(J) = (r2(J) - r1(J)) / length ! write to unit vector
-    END DO
-	END SUBROUTINE UnitVector
+   END SUBROUTINE UnitVector
 
 
 
@@ -1893,12 +1872,12 @@ CONTAINS
     Real(ReKi)                :: invdet  ! inverse of the determinant
 
     det = M(1, 1) * (M(2, 2) * M(3, 3) - M(3, 2) * M(2, 3)) - &
-			    M(1, 2) * (M(2, 1) * M(3, 3) - M(2, 3) * M(3, 1)) + &
-			    M(1, 3) * (M(2, 1) * M(3, 2) - M(2, 2) * M(3, 1));
+             M(1, 2) * (M(2, 1) * M(3, 3) - M(2, 3) * M(3, 1)) + &
+             M(1, 3) * (M(2, 1) * M(3, 2) - M(2, 2) * M(3, 1));
 
     invdet = 1 / det   ! because multiplying is faster than dividing
 
-		Minv(1, 1) = (M(2, 2) * M(3, 3) - M(3, 2) * M(2, 3)) * invdet
+    Minv(1, 1) = (M(2, 2) * M(3, 3) - M(3, 2) * M(2, 3)) * invdet
     Minv(1, 2) = (M(1, 3) * M(3, 2) - M(1, 2) * M(3, 3)) * invdet
     Minv(1, 3) = (M(1, 2) * M(2, 3) - M(1, 3) * M(2, 2)) * invdet
     Minv(2, 1) = (M(2, 3) * M(3, 1) - M(2, 1) * M(3, 3)) * invdet
@@ -1910,44 +1889,6 @@ CONTAINS
 
   END SUBROUTINE Inverse3by3
 
-
-  ! computes dot product of 3by3 vectors
-  !-----------------------------------------------------------------------
-  FUNCTION DotProd( A, B )
-    Real(ReKi)  :: DotProd
-    Real(ReKi)  :: A(:)
-    Real(ReKi)  :: B(:)
-
-    Integer(intKi) :: J
-
-
-    DotProd = 0.0_ReKi
-
-    DO J=1,3
-      DotProd = DotProd + A(J)*B(J)
-    END DO
-	END FUNCTION DotProd
-
-
-  ! computes L2 norm, i.e. magnitude
-  !-----------------------------------------------------------------------
-  FUNCTION Norm2( A )
-    Real(ReKi)  :: Norm2
-    Real(ReKi)  :: A(:)
-
-    Real(ReKi)     :: Sum1
-    Integer(intKi) :: J
-
-
-    Sum1 = 0.0_ReKi
-
-    DO J=1,size(A)
-      Sum1 = Sum1 + A(J)*A(J)
-    END DO
-
-    Norm2 = sqrt(Sum1)
-
-	END FUNCTION Norm2
 
 
 END MODULE MoorDyn
