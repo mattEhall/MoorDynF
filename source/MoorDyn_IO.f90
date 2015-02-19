@@ -169,7 +169,6 @@ CONTAINS
 
     ! Echo Input Files.
     CALL ReadVar ( UnIn, FileName, InitInp%Echo, 'Echo', 'Echo Input', ErrStat )
-
     IF ( ErrStat /= ErrID_None ) THEN
        ErrMsg  = ' Failed to read Echo parameter.'
        CALL CleanUp()
@@ -177,22 +176,22 @@ CONTAINS
     END IF
 
 
-       ! If we are Echoing the input then we should re-read the first three lines so that we can echo them
-       ! using the NWTC_Library routines.  The echoing is done inside those routines via a global variable
-       ! which we must store, set, and then replace on error or completion.
+    ! If we are Echoing the input then we should re-read the first three lines so that we can echo them
+    ! using the NWTC_Library routines.  The echoing is done inside those routines via a global variable
+    ! which we must store, set, and then replace on error or completion.
 
     IF ( InitInp%Echo ) THEN
 
-       EchoFile = TRIM(FileName)//'.echo' 			! open an echo file for writing
-       CALL GetNewUnit( UnEc )
-       CALL OpenEcho ( UnEc, EchoFile, ErrStat, ErrMsg )
-       IF ( ErrStat /= ErrID_None ) THEN
-          ErrMsg  = ' Failed to open Echo file.'
-          CALL CleanUp()
-          RETURN
-       END IF
+        EchoFile = TRIM(FileName)//'.ech'                      ! open an echo file for writing
+        CALL GetNewUnit( UnEc )
+        CALL OpenEcho ( UnEc, EchoFile, ErrStat, ErrMsg )
+        IF ( ErrStat /= ErrID_None ) THEN
+           ErrMsg  = ' Failed to open Echo file.'
+           CALL CleanUp()
+           RETURN
+        END IF
 
-       REWIND(UnIn) 		! rewind to start of input file to re-read the first few lines
+        REWIND(UnIn)      ! rewind to start of input file to re-read the first few lines
 
        CALL ReadCom( UnIn, FileName, 'MoorDyn input file header line 1', ErrStat, ErrMsg, UnEc )
 
@@ -1081,7 +1080,7 @@ END SUBROUTINE MDIO_OpenOutput
           CASE (VelZ)
             y%WriteOutput(I) = other%LineList(p%OutParam(I)%ObjID)%rd(3,p%OutParam(I)%NodeID) ! z velocity
           CASE (Ten)
-            y%WriteOutput(I) = Norm2(other%LineList(p%OutParam(I)%ObjID)%T(:,p%OutParam(I)%NodeID))  ! tension this isn't quite right, since it's segment tension...
+            y%WriteOutput(I) = TwoNorm(other%LineList(p%OutParam(I)%ObjID)%T(:,p%OutParam(I)%NodeID))  ! tension this isn't quite right, since it's segment tension...
           CASE DEFAULT
             y%WriteOutput(I) = 0.0_ReKi
             ErrStat = ErrID_Warn
@@ -1128,32 +1127,7 @@ END SUBROUTINE MDIO_OpenOutput
 
     END DO ! I
 
-
-
-  CONTAINS
-
-    ! computes L2 norm, i.e. magnitude
-    !-----------------------------------------------------------------------
-    FUNCTION Norm2( A )
-      Real(ReKi)  :: Norm2
-      Real(ReKi)  :: A(:)
-
-      Real(ReKi)     :: Sum1
-      Integer(intKi) :: J
-
-
-      Sum1 = 0.0_ReKi
-
-      DO J=1,size(A)
-        Sum1 = Sum1 + A(J)*A(J)
-      END DO
-
-      Norm2 = sqrt(Sum1)
-
-    END FUNCTION Norm2
-
-
-  END SUBROUTINE MDIO_WriteOutputs
+END SUBROUTINE MDIO_WriteOutputs
 
   !====================================================================================================
 

@@ -35,5 +35,8 @@ Line     LineType  UnstrLen  NumSegs   NodeAnch  NodeFair  Flags/Outputs
 FairTen1
 FairTen2
 FairTen3
+L3N10px
+C4px
+C4vx
 END
 --------------------- need this line ------------------

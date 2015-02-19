@@ -15,20 +15,23 @@ include Registry_NWTC_Library.txt
 
                                           
 ## ============================== Define input types here: ============================================================================================================================================            
-typedef   MoorDyn/MD  InitInputType       	ReKi          	g    	-        -999.9  -  "gravity constant"   "[m/s^2]"   
-typedef   ^           ^      		ReKi          	rhoW 	-        -999.9  -  "sea density"        "[kg/m^3]"
-typedef   ^           ^      		ReKi          	WtrDepth      	-        -999.9  -  "depth of water"     "[m]"   
-typedef   ^	       ^              	ReKi      	PtfmInit	{6}       -      -  "initial position of platform"	-
-typedef   ^           ^      		CHARACTER(255)	FileName          -      ""     -  "MoorDyn input file"
-typedef   ^           ^      		LOGICAL	Echo           -         ""     -  "echo parameter - do we want to echo the header line describing the input file?" 
-typedef   ^           ^      		ReKi          	DT 	-        -       -  "is this driver program time step size?"        "[s]"
-typedef   ^           ^      		ReKi          	DTmooring 	-        -       -  "desired time step for mooring integration"        "[s]"
-typedef         ^       ^                    ReKi           DTIC   	-        -       -   "convergence check time step for IC generation"              "[s]"
-typedef         ^       ^                    ReKi           TMaxIC   	-        120     -   "maximum time to allow for getting converged ICs"              "[s]"
-typedef         ^       ^                    ReKi           CdScaleIC      -        1       -   "factor to scale drag coefficients by during dynamic relaxation"              "[]"
-typedef         ^       ^                    ReKi           threshIC       -        0.01    -   "convergence tolerance for ICs  (0.01 means 1%)"              "[]"
-typedef   ^           ^      		CHARACTER(10)	OutList       {:}        ""     -  "string containing list of output channels requested in input file"
-typedef   ^           ^      		IntKi          NumOuts        -         ""     -  "" 
+typedef   MoorDyn/MD  InitInputType    ReKi              g    	         -      -999.9   -  "gravity constant"   "[m/s^2]"   
+typedef   ^           ^      		      ReKi              rhoW 	         -      -999.9   -  "sea density"        "[kg/m^3]"
+typedef   ^           ^      		      ReKi              WtrDepth      	-      -999.9   -  "depth of water"     "[m]"   
+typedef   ^	          ^                ReKi      	      PtfmInit	     {6}      -       -  "initial position of platform"	-
+typedef   ^           ^      		      CHARACTER(1024)	FileName       -      ""       -   "MoorDyn input file"
+typedef   ^           ^      		      CHARACTER(1024)	RootName	      -      -        -   "RootName for writing output files"	-
+
+typedef   ^           ^      		      LOGICAL	         Echo           -      ""       -  "echo parameter - do we want to echo the header line describing the input file?" 
+typedef   ^           ^      		      ReKi          	   DT 	         -       -       -  "is this driver program time step size?"        "[s]"
+typedef   ^           ^      		      ReKi          	   DTmooring 	   -       -       -  "desired time step for mooring integration"        "[s]"
+typedef   ^           ^                ReKi              DTIC   	      -       -       -   "convergence check time step for IC generation"              "[s]"
+typedef   ^           ^                ReKi              TMaxIC   	   -       120     -   "maximum time to allow for getting converged ICs"              "[s]"
+typedef   ^           ^                ReKi              CdScaleIC      -       1       -   "factor to scale drag coefficients by during dynamic relaxation"              "[]"
+typedef   ^           ^                ReKi              threshIC       -       0.01    -   "convergence tolerance for ICs  (0.01 means 1%)"              "[]"
+typedef   ^           ^      		      CHARACTER(10)	   OutList        {:}      ""     -  "string containing list of output channels requested in input file"
+typedef   ^           ^      		      IntKi             NumOuts         -       ""     -  "" 
+
 # should probably add requested dt and glue code dt inputs here too
 #typedef   ^           ^      		CHARACTER(255)	libraryInputLine   -         ""                  -            "cable library string information (from input file)           @MH: I'd need this input to include a few additions: internal damping, drag coefficient, etc."   
 #typedef   ^           ^      		CHARACTER(255)	nodeInputLine      -         ""                  -            "node string information (from input file)"   
@@ -105,11 +108,11 @@ typedef	^      ^    		IntKi	        ObjID	-  -  -   "number of Connect or Line o
 
 
 ## ============================== Define Initialization outputs here: ================================================================================================================================
-typedef         ^       InitOutputType      CHARACTER(99)	progName           -         ""                  -            "program name"
-typedef         ^       ^                   CHARACTER(99)	version            -         ""                  -            "version numnber"
-typedef         ^       ^                   CHARACTER(24)	compilingData      -         ""                  -            "compiling data"
-typedef         ^       ^                   CHARACTER(10)	writeOutputHdr    {:}        ""                  -            "first line output file contents: output variable names"
-typedef         ^       ^                   CHARACTER(10)	writeOutputUnt    {:}        ""                  -            "second line of output file contents: units"
+#typedef         ^       InitOutputType      CHARACTER(99)	progName           -         ""                  -            "program name"
+#typedef         ^       ^                   CHARACTER(99)	version            -         ""                  -            "version numnber"
+#typedef         ^       ^                   CHARACTER(24)	compilingData      -         ""                  -            "compiling data"
+typedef         ^       InitOutputType      CHARACTER(ChanLen)	writeOutputHdr    {:}        ""                  -            "first line output file contents: output variable names"
+typedef         ^       ^                   CHARACTER(ChanLen)	writeOutputUnt    {:}        ""                  -            "second line of output file contents: units"
 typedef         ^       ^                   ProgDesc     	Ver                -         ""                  -            "his module's name, version, and date"
 
 
