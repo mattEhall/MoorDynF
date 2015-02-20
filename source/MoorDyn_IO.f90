@@ -141,7 +141,7 @@ CONTAINS
     END IF
 
 
-    CALL WrScr( 'Opening MoorDyn input file:  '//FileName )
+    CALL WrScr( '  MD_Init: Opening MoorDyn input file:  '//FileName )
 
 
     !-------------------------------------------------------------------------------------------------
@@ -500,8 +500,7 @@ CONTAINS
 
        ! check all possible options types and see if OptString is one of them, in which case set the variable.
        if ( OptString == 'DT') THEN
-         read (OptValue,*) InitInp%DTmooring   ! or something
-         print *, 'set p dt to ', InitInp%DTmooring
+         read (OptValue,*) InitInp%DTmooring   
        else if ( OptString == 'G') then
          read (OptValue,*) p%G
        else if ( OptString == 'RHOW') then
@@ -559,8 +558,8 @@ CONTAINS
        RETURN
     END IF
 
-  print *, 'NumOuts is ', p%NumOuts
-  print *, 'OutList is ', InitInp%OutList(1:p%NumOuts)
+  !print *, 'NumOuts is ', p%NumOuts
+  print *, '  OutList is ', InitInp%OutList(1:p%NumOuts)
 
 
      !-------------------------------------------------------------------------------------------------
@@ -569,8 +568,6 @@ CONTAINS
 
            CLOSE( UnIn )
         IF (InitInp%Echo) CLOSE( UnEc )
-
-        CALL WrScr( 'Done reading MoorDyn input file:  '//FileName )
 
 
   CONTAINS
@@ -670,9 +667,9 @@ CONTAINS
       END IF
 
         p%OutParam(I)%Name = OutListTmp  ! label channel with whatever name was inputted, for now
-    print *, 'processing output channel request ', OutListTmp
+!    print *, 'processing output channel request ', OutListTmp
 
-    print *, 'indices are ', i1, i2, i3, i4
+!    print *, 'indices are ', i1, i2, i3, i4
 
       ! figure out what type of output it is and process accordingly
 
@@ -693,7 +690,6 @@ CONTAINS
         IF (OutListTmp(1:i1-1) == 'L') THEN
           p%OutParam(I)%OType = 1                ! Line object type
           ! for now we'll just assume the next character(s) are "n" to represent node number:
-          print *, 'interpreting string', OutListTmp(i3:i4-1)
           READ (OutListTmp(i3:i4-1),*) nID
           p%OutParam%NodeID = nID
           qVal = OutListTmp(i4:)  ! isolate quantity type string
@@ -816,7 +812,7 @@ CONTAINS
       RETURN
     END IF
 
-    print *, "y%WriteOutput allocated to size ", size(y%WriteOutput)
+    !print *, "y%WriteOutput allocated to size ", size(y%WriteOutput)
 
    ! These variables are to help follow the framework template, but the data in them is simply a copy of data
    ! already available in the OutParam data structure
@@ -847,120 +843,90 @@ CONTAINS
 
 
 
-!====================================================================================================
-SUBROUTINE MDIO_OpenOutput( OutRootName,  p, other, InitOut, ErrStat, ErrMsg )
-!----------------------------------------------------------------------------------------------------
-
-      ! Passed variables
-
- !  TYPE(ProgDesc),                INTENT( IN    ) :: ProgVer
-   CHARACTER(*),                  INTENT( IN    ) :: OutRootName          ! Root name for the output file
-   TYPE(MD_ParameterType),        INTENT( INOUT ) :: p
-   TYPE(MD_OtherStateType),       INTENT (IN)     :: other
-   TYPE(MD_InitOutPutType ),      INTENT( IN    ) :: InitOut              !
-   INTEGER,                       INTENT(   OUT ) :: ErrStat              ! a non-zero value indicates an error occurred
-   CHARACTER(*),                  INTENT(   OUT ) :: ErrMsg               ! Error message if ErrStat /= ErrID_None
-
-      ! Local variables
-   INTEGER                                        :: I                    ! Generic loop counter
-   INTEGER                                        :: J                    ! Generic loop counter
-   CHARACTER(1024)                                :: OutFileName          ! The name of the output file  including the full path.
-   CHARACTER(200)                                 :: Frmt                 ! a string to hold a format statement
-   INTEGER                                        :: ErrStat2
-
-   !-------------------------------------------------------------------------------------------------
-   ! Initialize local variables
-   !-------------------------------------------------------------------------------------------------
-   ErrStat = ErrID_None
-   ErrMsg  = ""
-
-    p%Delim = ' '  ! for now
-
-   !-------------------------------------------------------------------------------------------------
-   ! Open the output file, if necessary, and write the header
-   !-------------------------------------------------------------------------------------------------
-
-   IF ( ALLOCATED( p%OutParam ) .AND. p%NumOuts > 0 ) THEN           ! Output has been requested so let's open an output file
-
+   !====================================================================================================
+   SUBROUTINE MDIO_OpenOutput( OutRootName,  p, other, InitOut, ErrStat, ErrMsg )
+   !----------------------------------------------------------------------------------------------------
+   
+      CHARACTER(*),                  INTENT( IN    ) :: OutRootName          ! Root name for the output file
+      TYPE(MD_ParameterType),        INTENT( INOUT ) :: p
+      TYPE(MD_OtherStateType),       INTENT (IN)     :: other
+      TYPE(MD_InitOutPutType ),      INTENT( IN    ) :: InitOut              !
+      INTEGER,                       INTENT(   OUT ) :: ErrStat              ! a non-zero value indicates an error occurred
+      CHARACTER(*),                  INTENT(   OUT ) :: ErrMsg               ! Error message if ErrStat /= ErrID_None
+   
+      INTEGER                                        :: I                    ! Generic loop counter
+      INTEGER                                        :: J                    ! Generic loop counter
+      CHARACTER(1024)                                :: OutFileName          ! The name of the output file  including the full path.
+      CHARACTER(200)                                 :: Frmt                 ! a string to hold a format statement
+      INTEGER                                        :: ErrStat2
+   
+     
+      ErrStat = ErrID_None
+      ErrMsg  = ""
+   
+       p%Delim = ' '  ! for now
+   
+      !-------------------------------------------------------------------------------------------------
+      ! Open the output file, if necessary, and write the header
+      !-------------------------------------------------------------------------------------------------
+   
+      IF ( ALLOCATED( p%OutParam ) .AND. p%NumOuts > 0 ) THEN           ! Output has been requested so let's open an output file
+   
+            ! Open the file for output
+         OutFileName = 'MoorDyn.out'
+         CALL GetNewUnit( UnOutFile )
+   
+         CALL OpenFOutFile ( UnOutFile, OutFileName, ErrStat, ErrMsg )
+         IF ( ErrStat >= AbortErrLev ) THEN
+            ErrMsg = ' Error opening MoorDyn-level output file: '//TRIM(ErrMsg)
+            RETURN
+         END IF
+   
+   
+         !Write the names of the output parameters:
+   
+         Frmt = '(A10,'//TRIM(Int2LStr(p%NumOuts))//'(A1,A10))'
+   
+         WRITE(UnOutFile,Frmt, IOSTAT=ErrStat2)  TRIM( 'Time' ), ( p%Delim, TRIM( p%OutParam(I)%Name), I=1,p%NumOuts )
+   
+         WRITE(UnOutFile,Frmt)  TRIM( '(s)' ), ( p%Delim, TRIM( p%OutParam(I)%Units ), I=1,p%NumOuts )
+   
+      ELSE  ! if no outputs requested
+   
+         print *, 'note, MDIO_OpenOutput thinks that no outputs have been requested.'
+   
+      END IF
+   
+      !--------------------------------------------------------------------------
+      ! -------------- now do the same for line output files --------------------
+   
+      ! allocate UnLineOuts
+      ALLOCATE(UnLineOuts(p%NLines))  ! should add error checking
+   
+      DO I = 1,p%NLines
+   
          ! Open the file for output
-      OutFileName = 'MoorDyn.out'
-      CALL GetNewUnit( UnOutFile )
-
-      CALL OpenFOutFile ( UnOutFile, OutFileName, ErrStat, ErrMsg )
-      IF ( ErrStat >= AbortErrLev ) THEN
-         ErrMsg = ' Error opening MoorDyn-level output file: '//TRIM(ErrMsg)
-         RETURN
-      END IF
-
-
-         ! Write the output file header
-
-   !   WRITE (p%UnOutFile,'(/,A/)', IOSTAT=ErrStat2)  'These predictions were generated by '//TRIM(GETNVD(ProgVer))//&
-    !                  ' on '//CurDate()//' at '//CurTime()//'.'
-
-  !   WRITE(p%UnOutFile, '(//)') ! add 3 lines to make file format consistant with FAST v8 (headers on line 7; units on line 8) [this allows easier post-processing]
-
-    !Write the names of the output parameters:
-
-    Frmt = '(A10,'//TRIM(Int2LStr(p%NumOuts))//'(A1,A10))'
-
-
-    print *, 'Names Frmt is ', Frmt
-
-    WRITE(UnOutFile,Frmt, IOSTAT=ErrStat2)  TRIM( 'Time' ), ( p%Delim, TRIM( p%OutParam(I)%Name), I=1,p%NumOuts )
-
-
-    Frmt = '(A10,'//TRIM(Int2LStr(p%NumOuts))//'(A1,A10))'    !??? <<<<<<<
-
-    WRITE(UnOutFile,Frmt)  TRIM( '(s)' ), ( p%Delim, TRIM( p%OutParam(I)%Units ), I=1,p%NumOuts )
-
-   print *, 'Units is ', p%OutParam(1:p%NumOuts)%Units
-
-   print *, '1 name is ', p%OutParam(1)%Name
-   print *, '1 units is ', p%OutParam(1)%Units
-   print *, '1 QType is ', p%OutParam(1)%QType
-
-    ELSE  ! if no outputs requested
-
-      print *, 'note, MDIO_OpenOutput things that no outputs have been requested.'
-
-   END IF
-
-   !--------------------------------------------------------------------------
-   ! -------------- now do the same for line output files --------------------
-
-   ! allocate UnLineOuts
-   ALLOCATE(UnLineOuts(p%NLines))  ! should add error checking
-
-   DO I = 1,p%NLines
-
-      ! Open the file for output
-      OutFileName = 'Line'//TRIM(Int2LStr(I))//'.out'
-      CALL GetNewUnit( UnLineOuts(I) )
-
-      CALL OpenFOutFile ( UnLineOuts(I), OutFileName, ErrStat, ErrMsg )
-      IF ( ErrStat >= AbortErrLev ) THEN
-         ErrMsg = ' Error opening Line output file '//TRIM(ErrMsg)
-         RETURN
-      END IF
-
-
-    !Write the names of the output parameters:
-
-    Frmt = '(A10,'//TRIM(Int2LStr(3+3*other%LineList(I)%N))//'(A1,A10))'
-
-    !WRITE(UnLineOuts(I),Frmt, IOSTAT=ErrStat2)  TRIM( 'Time' ), ( p%Delim,
-
-    WRITE(UnLineOuts(I),Frmt, IOSTAT=ErrStat2)  TRIM( 'Time' ), ( p%Delim, 'Node'//TRIM(Int2Lstr(J))//'px', p%Delim, 'Node'//TRIM(Int2Lstr(J))//'py', p%Delim, 'Node'//TRIM(Int2Lstr(J))//'pz', J=0,(other%LineList(I)%N) )
-
-!   WRITE(UnOutFile,Frmt)  TRIM( '(s)' ), ( p%Delim, TRIM( p%OutParam(I)%Units ), I=1,p%NumOuts )
-
-  END DO ! I
-
-
-END SUBROUTINE MDIO_OpenOutput
-
-!====================================================================================================
+         OutFileName = 'Line'//TRIM(Int2LStr(I))//'.out'
+         CALL GetNewUnit( UnLineOuts(I) )
+   
+         CALL OpenFOutFile ( UnLineOuts(I), OutFileName, ErrStat, ErrMsg )
+         IF ( ErrStat >= AbortErrLev ) THEN
+            ErrMsg = ' Error opening Line output file '//TRIM(ErrMsg)
+            RETURN
+         END IF   
+   
+         !Write the names of the output parameters:
+   
+         Frmt = '(A10,'//TRIM(Int2LStr(3+3*other%LineList(I)%N))//'(A1,A10))'
+      
+         WRITE(UnLineOuts(I),Frmt, IOSTAT=ErrStat2)  TRIM( 'Time' ), ( p%Delim, 'Node'//TRIM(Int2Lstr(J))//'px', p%Delim, 'Node'//TRIM(Int2Lstr(J))//'py', p%Delim, 'Node'//TRIM(Int2Lstr(J))//'pz', J=0,(other%LineList(I)%N) )
+   
+      END DO ! I
+   
+   
+   END SUBROUTINE MDIO_OpenOutput
+   
+   !====================================================================================================
 
 
    !====================================================================================================
@@ -1009,127 +975,114 @@ END SUBROUTINE MDIO_OpenOutput
    !====================================================================================================
 
 
-  !====================================================================================================
-  SUBROUTINE MDIO_WriteOutputs( Time, p, other, y, ErrStat, ErrMsg )
-  ! This subroutine gathers the output data defined by the OutParams list and
-  ! writes it to the output file opened in MDIO_OutInit()
-  !----------------------------------------------------------------------------------------------------
-
-        ! Passed variables
-  !   INTEGER,                      INTENT( IN    ) :: UnOutFile               ! file unit for the output file
-     REAL(DbKi),                   INTENT( IN    ) :: Time                 ! Time for this output
-     TYPE(MD_ParameterType),       INTENT( IN    ) :: p                    ! MoorDyn module's parameter data
-     TYPE(MD_OutputType),          INTENT(INOUT)  :: y           ! INTENT( OUT) : Initial system outputs (outputs are not calculated; only the output mesh is initialized)
-     TYPE(MD_OtherStateType),      INTENT( IN    ) :: other                ! MoorDyn module's other data
-     INTEGER,                      INTENT(   OUT ) :: ErrStat              ! returns a non-zero value when an error occurs
-     CHARACTER(*),                 INTENT(   OUT ) :: ErrMsg               ! Error message if ErrStat /= ErrID_None
-
-        ! Local variables
-    ! REAL(ReKi)                             :: OutData (0:p%NumOuts)       ! an output array
-     INTEGER                                :: I                           ! Generic loop counter
-     INTEGER                                :: J                           ! Generic loop counter
-     INTEGER                                :: K                           ! Generic loop counter
-     CHARACTER(200)                         :: Frmt                        ! a string to hold a format statement
-
-        ! Initialize ErrStat and determine if it makes any sense to write output
-
-     IF ( .NOT. ALLOCATED( p%OutParam ) .OR. UnOutFile < 0 )  THEN
-        ErrStat = ErrID_Fatal
-        ErrMsg  = ' To write outputs for MoorDyn there must be a valid file ID and OutParam must be allocated.'
-        RETURN
-     ELSE
-        ErrStat = ErrID_None
-     END IF
-
-    ! gather the required output quantities (INCOMPLETE!)
-    DO I = 1,p%NumOuts
-
-      IF (p%OutParam(I)%OType == 2) THEN  ! if dealing with a Connect output
-        SELECT CASE (p%OutParam(I)%QType)
-          CASE (PosX)
-            y%WriteOutput(I) = other%ConnectList(p%OutParam(I)%ObjID)%r(1)  ! x position
-          CASE (PosY)
-            y%WriteOutput(I) = other%ConnectList(p%OutParam(I)%ObjID)%r(2) ! y position
-          CASE (PosZ)
-            y%WriteOutput(I) = other%ConnectList(p%OutParam(I)%ObjID)%r(3) ! z position
-          CASE (VelX)
-            y%WriteOutput(I) = other%ConnectList(p%OutParam(I)%ObjID)%rd(1) ! x velocity
-          CASE (VelY)
-            y%WriteOutput(I) = other%ConnectList(p%OutParam(I)%ObjID)%rd(2) ! y velocity
-          CASE (VelZ)
-            y%WriteOutput(I) = other%ConnectList(p%OutParam(I)%ObjID)%rd(3) ! z velocity
-          CASE DEFAULT
-            y%WriteOutput(I) = 0.0_ReKi
-            ErrStat = ErrID_Warn
-            ErrMsg = ' Unsupported output quantity from Connect object requested.'
-        END SELECT
-
-      ELSE IF (p%OutParam(I)%OType == 1) THEN  ! if dealing with a Line output
-
-        SELECT CASE (p%OutParam(I)%QType)
-          CASE (PosX)
-            y%WriteOutput(I) = other%LineList(p%OutParam(I)%ObjID)%r(1,p%OutParam(I)%NodeID)  ! x position
-          CASE (PosY)
-            y%WriteOutput(I) = other%LineList(p%OutParam(I)%ObjID)%r(2,p%OutParam(I)%NodeID) ! y position
-          CASE (PosZ)
-            y%WriteOutput(I) = other%LineList(p%OutParam(I)%ObjID)%r(3,p%OutParam(I)%NodeID) ! z position
-          CASE (VelX)
-            y%WriteOutput(I) = other%LineList(p%OutParam(I)%ObjID)%rd(1,p%OutParam(I)%NodeID) ! x velocity
-          CASE (VelY)
-            y%WriteOutput(I) = other%LineList(p%OutParam(I)%ObjID)%rd(2,p%OutParam(I)%NodeID) ! y velocity
-          CASE (VelZ)
-            y%WriteOutput(I) = other%LineList(p%OutParam(I)%ObjID)%rd(3,p%OutParam(I)%NodeID) ! z velocity
-          CASE (Ten)
-            y%WriteOutput(I) = TwoNorm(other%LineList(p%OutParam(I)%ObjID)%T(:,p%OutParam(I)%NodeID))  ! tension this isn't quite right, since it's segment tension...
-          CASE DEFAULT
-            y%WriteOutput(I) = 0.0_ReKi
-            ErrStat = ErrID_Warn
-            ErrMsg = ' Unsupported output quantity from Line object requested.'
-        END SELECT
-
-      ELSE  ! it must be an invalid output, so write zero
-        y%WriteOutput(I) = 0.0_ReKi
-
+   !====================================================================================================
+   SUBROUTINE MDIO_WriteOutputs( Time, p, other, y, ErrStat, ErrMsg )
+      ! This subroutine gathers the output data defined by the OutParams list and
+      ! writes it to the output file opened in MDIO_OutInit()
+   
+      REAL(DbKi),                   INTENT( IN    ) :: Time                 ! Time for this output
+      TYPE(MD_ParameterType),       INTENT( IN    ) :: p                    ! MoorDyn module's parameter data
+      TYPE(MD_OutputType),          INTENT(INOUT)  :: y           ! INTENT( OUT) : Initial system outputs (outputs are not calculated; only the output mesh is initialized)
+      TYPE(MD_OtherStateType),      INTENT( IN    ) :: other                ! MoorDyn module's other data
+      INTEGER,                      INTENT(   OUT ) :: ErrStat              ! returns a non-zero value when an error occurs
+      CHARACTER(*),                 INTENT(   OUT ) :: ErrMsg               ! Error message if ErrStat /= ErrID_None
+    
+      INTEGER                                :: I                           ! Generic loop counter
+      INTEGER                                :: J                           ! Generic loop counter
+      INTEGER                                :: K                           ! Generic loop counter
+      CHARACTER(200)                         :: Frmt                        ! a string to hold a format statement
+    
+    
+      IF ( .NOT. ALLOCATED( p%OutParam ) .OR. UnOutFile < 0 )  THEN
+         ErrStat = ErrID_Fatal
+         ErrMsg  = ' To write outputs for MoorDyn there must be a valid file ID and OutParam must be allocated.'
+         RETURN
+      ELSE
+         ErrStat = ErrID_None
       END IF
-
-    END DO ! I, loop through OutParam
-
-
-    ! Write the output parameters to the file
-
-     Frmt = '(F10.4,'//TRIM(Int2LStr(p%NumOuts))//'(A1,e10.4))'   ! should evenutally use user specified format?
-
-  !   print *, 'in WriteOutputs, Frmt is ', Frmt
-
-   !  print *, ' and MDWrOutput is ', MDWrOutput(1:p%NumOuts)
-
-     WRITE(UnOutFile,Frmt)  Time, ( p%Delim, y%WriteOutput(I), I=1,p%NumOuts )
-
-
-
-
-
-    !------------------------------------------------------------------------
-    ! now do the outputs for each line!  <<< so far this is just writing node positions without any user options
-
-    DO I=1,p%NLines
-      Frmt = '(F10.4,'//TRIM(Int2LStr(3+3*other%LineList(I)%N))//'(A1,e10.4))'   ! should evenutally use user specified format?
-
-      DO J = 0,other%LineList(I)%N  ! note index starts at zero because these are nodes
-        DO K = 1,3
-          LineWriteOutputs(3*J+K) = other%LineList(I)%r(K,J)
+    
+      ! gather the required output quantities (INCOMPLETE!)
+      DO I = 1,p%NumOuts
+    
+        IF (p%OutParam(I)%OType == 2) THEN  ! if dealing with a Connect output
+          SELECT CASE (p%OutParam(I)%QType)
+            CASE (PosX)
+              y%WriteOutput(I) = other%ConnectList(p%OutParam(I)%ObjID)%r(1)  ! x position
+            CASE (PosY)
+              y%WriteOutput(I) = other%ConnectList(p%OutParam(I)%ObjID)%r(2) ! y position
+            CASE (PosZ)
+              y%WriteOutput(I) = other%ConnectList(p%OutParam(I)%ObjID)%r(3) ! z position
+            CASE (VelX)
+              y%WriteOutput(I) = other%ConnectList(p%OutParam(I)%ObjID)%rd(1) ! x velocity
+            CASE (VelY)
+              y%WriteOutput(I) = other%ConnectList(p%OutParam(I)%ObjID)%rd(2) ! y velocity
+            CASE (VelZ)
+              y%WriteOutput(I) = other%ConnectList(p%OutParam(I)%ObjID)%rd(3) ! z velocity
+            CASE DEFAULT
+              y%WriteOutput(I) = 0.0_ReKi
+              ErrStat = ErrID_Warn
+              ErrMsg = ' Unsupported output quantity from Connect object requested.'
+          END SELECT
+    
+        ELSE IF (p%OutParam(I)%OType == 1) THEN  ! if dealing with a Line output
+    
+          SELECT CASE (p%OutParam(I)%QType)
+            CASE (PosX)
+              y%WriteOutput(I) = other%LineList(p%OutParam(I)%ObjID)%r(1,p%OutParam(I)%NodeID)  ! x position
+            CASE (PosY)
+              y%WriteOutput(I) = other%LineList(p%OutParam(I)%ObjID)%r(2,p%OutParam(I)%NodeID) ! y position
+            CASE (PosZ)
+              y%WriteOutput(I) = other%LineList(p%OutParam(I)%ObjID)%r(3,p%OutParam(I)%NodeID) ! z position
+            CASE (VelX)
+              y%WriteOutput(I) = other%LineList(p%OutParam(I)%ObjID)%rd(1,p%OutParam(I)%NodeID) ! x velocity
+            CASE (VelY)
+              y%WriteOutput(I) = other%LineList(p%OutParam(I)%ObjID)%rd(2,p%OutParam(I)%NodeID) ! y velocity
+            CASE (VelZ)
+              y%WriteOutput(I) = other%LineList(p%OutParam(I)%ObjID)%rd(3,p%OutParam(I)%NodeID) ! z velocity
+            CASE (Ten)
+              y%WriteOutput(I) = TwoNorm(other%LineList(p%OutParam(I)%ObjID)%T(:,p%OutParam(I)%NodeID))  ! tension this isn't quite right, since it's segment tension...
+            CASE DEFAULT
+              y%WriteOutput(I) = 0.0_ReKi
+              ErrStat = ErrID_Warn
+              ErrMsg = ' Unsupported output quantity from Line object requested.'
+          END SELECT
+    
+        ELSE  ! it must be an invalid output, so write zero
+          y%WriteOutput(I) = 0.0_ReKi
+    
+        END IF
+    
+      END DO ! I, loop through OutParam
+  
+  
+      ! Write the output parameters to the file
+  
+      Frmt = '(F10.4,'//TRIM(Int2LStr(p%NumOuts))//'(A1,e10.4))'   ! should evenutally use user specified format?
+    
+      WRITE(UnOutFile,Frmt)  Time, ( p%Delim, y%WriteOutput(I), I=1,p%NumOuts )
+  
+  
+  
+  
+  
+      !------------------------------------------------------------------------
+      ! now do the outputs for each line!  <<< so far this is just writing node positions without any user options
+   
+      DO I=1,p%NLines
+        Frmt = '(F10.4,'//TRIM(Int2LStr(3+3*other%LineList(I)%N))//'(A1,e10.4))'   ! should evenutally use user specified format?
+   
+        DO J = 0,other%LineList(I)%N  ! note index starts at zero because these are nodes
+          DO K = 1,3
+            LineWriteOutputs(3*J+K) = other%LineList(I)%r(K,J)
+          END DO
         END DO
-      END DO
-
-      WRITE(UnLineOuts(I),Frmt)  Time, ( p%Delim, LineWriteOutputs(J), J=1,(3+3*other%LineList(I)%N) )
-
-  !    print *, 'Line', I, Time, ( p%Delim, LineWriteOutputs(J), J=1,(3+3*other%LineList(I)%N) )
-
-    END DO ! I
-
-END SUBROUTINE MDIO_WriteOutputs
-
-  !====================================================================================================
+   
+        WRITE(UnLineOuts(I),Frmt)  Time, ( p%Delim, LineWriteOutputs(J), J=1,(3+3*other%LineList(I)%N) )
+   
+      END DO ! I
+  
+   END SUBROUTINE MDIO_WriteOutputs
+   !====================================================================================================
 
 
 END MODULE MoorDyn_IO

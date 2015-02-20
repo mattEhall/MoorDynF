@@ -8,7 +8,7 @@ MODULE MoorDyn
 
    PRIVATE
 
-   TYPE(ProgDesc), PARAMETER            :: MD_ProgDesc = ProgDesc( 'MoorDyn', 'v0.9.01-mth', '10-Dec-2014' )
+   TYPE(ProgDesc), PARAMETER            :: MD_ProgDesc = ProgDesc( 'MoorDyn', 'v0.9.01-mth', '19-Feb-2015' )
 
 
    PUBLIC :: MD_Init
@@ -75,10 +75,8 @@ CONTAINS
          IF (ErrStat >= AbortErrLev) RETURN
 
 
-      print *, 'SetOutParam is done.  Size of y%WriteOutput is ', size(y%WriteOutput)
 
-
-      CALL WrScr( 'moving on to the next step in MD_Init' )
+      CALL WrScr( '  MD_Init: Done reading input file and processing output list' )
 
       !-------------------------------------------------------------------------------------------------
       !          Connect mooring system together and make necessary allocations
@@ -158,7 +156,7 @@ CONTAINS
         RETURN
       END IF
 
-      CALL WrScr( 'Done allocating variables' )
+      CALL WrScr( '  MD_Init: Done allocating variables' )
 
 
       ! get header information for the FAST output file   <<< what does this mean?
@@ -169,13 +167,13 @@ CONTAINS
       !--------------------------------------------------------------------------
       ! <<< need to update error handling in this section
 
+      print *, ' making meshes with ', p%NFairs, ' nodes'
 
       ! create input mesh for fairlead kinematics
       CALL MeshCreate(BlankMesh=u%PtFairleadDisplacement , &
                     IOS= COMPONENT_INPUT           , &
-                    NNodes=p%NFairs                , &
-                    TranslationDisp=.TRUE.         , &
-                    TranslationVel=.TRUE.          , &
+                    Nnodes=p%NFairs                , &
+                    TranslationDisp=.TRUE.         , & !	     TranslationVel=.TRUE.          , &
                     ErrStat=ErrStat                , &
                     ErrMess=ErrMsg)
 
@@ -183,7 +181,7 @@ CONTAINS
 
       DO i = 1,p%NFairs
 
-         ! set position of each node (this way rather than manually... for error checking?  seems more tedious)
+         ! set position of each node 
          Pos(1) = other%ConnectList(other%FairIdList(i))%conX ! set initial position of each fairlead i (IFP)
          Pos(2) = other%ConnectList(other%FairIdList(i))%conY
          Pos(3) = other%ConnectList(other%FairIdList(i))%conZ
@@ -192,9 +190,9 @@ CONTAINS
             IF (ErrStat /= ErrID_None) CALL WrScr(TRIM(ErrMsg))               ! temporary
 
          ! also set velocity of each node to zero (manually)
-         u%PtFairleadDisplacement%TranslationVel(1,i) = 0.0_ReKi
-         u%PtFairleadDisplacement%TranslationVel(2,i) = 0.0_ReKi
-         u%PtFairleadDisplacement%TranslationVel(3,i) = 0.0_ReKi
+!         u%PtFairleadDisplacement%TranslationVel(1,i) = 0.0_ReKi
+!         u%PtFairleadDisplacement%TranslationVel(2,i) = 0.0_ReKi
+!         u%PtFairleadDisplacement%TranslationVel(3,i) = 0.0_ReKi
 
          ! set each node as a point element
          CALL MeshConstructElement(u%PtFairleadDisplacement, ELEMENT_POINT, ErrStat, ErrMsg, i)
@@ -207,21 +205,14 @@ CONTAINS
 
 
       ! copy the input fairlead kinematics mesh to make the output mesh for fairlead loads, PtFairleadLoad
-      CALL MeshCopy ( SrcMesh=u%PtFairleadDisplacement, DestMesh=y%PtFairleadLoad, &
-                      CtrlCode=MESH_SIBLING, Force=.TRUE., ErrStat=ErrStat, ErrMess=ErrMsg )
+      CALL MeshCopy ( SrcMesh  = u%PtFairleadDisplacement,   DestMesh = y%PtFairleadLoad, &
+                      CtrlCode = MESH_SIBLING,               IOS      = COMPONENT_OUTPUT, &
+	       Force    = .TRUE.,                     ErrStat=ErrStat, ErrMess=ErrMsg )
          IF (ErrStat /= ErrID_None) CALL WrScr(TRIM(ErrMsg))             ! temporary
 
-      ! assign the resulting internal node positions to the integrator initial state vector! (velocities leave at 0)
-      DO J = 1, N-1
-        DO K = 1, 3
-          x%states(other%LineStateIndList(I) + 3*N-3 + 3*J-3 + K-1 ) = other%LineList(I)%r(K,J) ! assign position
-          x%states(other%LineStateIndList(I) +         3*J-3 + K-1 ) = 0.0_ReKi ! assign velocities (of zero)
-        END DO
-      END DO
-
+      y%PtFairleadLoad%IOS = COMPONENT_OUTPUT  ! duplicate?
       
-      y%PtFairleadLoad%IOS = COMPONENT_OUTPUT  ! a stragler?
-
+      
 
       ! --------------------------------------------------------------------
       !   go through all Connects and set position based on input file
@@ -290,8 +281,6 @@ CONTAINS
          other%LineList(I)%rd(:,N) = (/ 0.0, 0.0, 0.0 /)  ! set anchor end velocities to zero
          other%LineList(I)%rd(:,0) = (/ 0.0, 0.0, 0.0 /)  ! set fairlead end velocities to zero
 
-         print *, 'Line', other%LineList(I)%IdNum, ' PropsIdNum is ', other%LineList(I)%PropsIdNum, ' ... ', other%LineTypeList(other%LineList(I)%PropsIdNum)%IdNum ! temporary
-
          ! set initial line internal node positions using quasi-static model or straight-line interpolation from anchor to fairlead
          CALL InitializeLine( other%LineList(I), other%LineTypeList(other%LineList(I)%PropsIdNum), p%rhoW ,  ErrStat2, ErrMsg2)
             CALL CheckError( ErrStat2, ErrMsg2 )
@@ -316,7 +305,7 @@ CONTAINS
       !           do dynamic relaxation to get ICs
       ! --------------------------------------------------------------------
 
-      CALL WrScr("   Finalizing ICs using dynamic relaxation.")
+      CALL WrScr("  MD_Init: Finalizing ICs using dynamic relaxation.")
 
       ! boost drag coefficient of each line type
       DO I = 1, p%NTypes
@@ -346,7 +335,6 @@ CONTAINS
  !     print *, InitInp%DTmooring
  !     print *, p%Ndt
 
-      print *, 'about to start IC time stepping'
 
  !     print *, InitInp%TMaxIC
  !     print *, p%dt
@@ -378,12 +366,15 @@ CONTAINS
             END DO
 
             IF (J == p%NFairs) THEN   ! if we made it with all cases satisfying the threshold
-               print *,"   Fairlead tensions converged to ", 100.0*InitInp%threshIC, " after ", t , " seconds."
+               print *, ' MD_Init: Fairlead tensions converged to ', 100.0*InitInp%threshIC, ' after ', t , ' seconds.'
                EXIT  ! break out of the time stepping loop
             END IF
-         ELSE IF (I == ceiling(InitInp%TMaxIC/InitInp%DTIC) ) THEN
-            ErrStat = ErrID_Warn
-            ErrMsg = 'ran dynamic convergence to TMaxIC without convergence'
+         END IF
+         
+         IF (I == ceiling(InitInp%TMaxIC/InitInp%DTIC) ) THEN
+            CALL WrScr('  MD_Init: ran dynamic convergence to TMaxIC without convergence')
+            !ErrStat = ErrID_Warn
+            !ErrMsg = '  MD_Init: ran dynamic convergence to TMaxIC without convergence'
          END IF
 
       END DO ! I ... looping through time steps
@@ -411,9 +402,7 @@ CONTAINS
       !InitOut%Ver = ProgDesc('MoorDyn',TRIM(InitOut%version),TRIM(InitOut%compilingData)) ! rhis is a duplicate of above
 
 
-      print *, 'initialized with p dt of ', p%dt, ' and p%dtcoupling of ', p%dtCoupling
-
-      CALL WrScr( 'Done MD_Init' )
+      print *, ' MD_Init: Done.  MoorDyn set up with dt=', p%dt, ' and dtcoupling=', p%dtCoupling
 
 
    CONTAINS
@@ -485,12 +474,12 @@ CONTAINS
       t2 = real(t, ReKi)
 
 
-      ! create space for arrays/meshes in u_interp <<< this would be slow, right?
+      ! create space for arrays/meshes in u_interp 
       CALL MD_CopyInput(u(1), u_interp, MESH_NEWCOPY, ErrStat2, ErrMsg2)
          CALL CheckError( ErrStat2, ErrMsg2 )
          IF (ErrStat >= AbortErrLev) RETURN
 
-      ! interpolate input mesh to correct time    ! <<< good enough for now?
+      ! interpolate input mesh to correct time    
       CALL MD_Input_ExtrapInterp(u, utimes, u_interp, t, ErrStat2, ErrMsg2)
          CALL CheckError( ErrStat2, ErrMsg2 )
          IF (ErrStat >= AbortErrLev) RETURN
@@ -499,8 +488,8 @@ CONTAINS
       ! go through fairleads and apply motions from driver
       DO I = 1, p%NFairs
          DO J = 1,3
-            other%ConnectList(other%FairIdList(I))%r(J)  = u_interp%PtFairleadDisplacement%TranslationDisp(J,I)
-            other%ConnectList(other%FairIdList(I))%rd(J) = u_interp%PtFairleadDisplacement%TranslationVel(J,I)
+            other%ConnectList(other%FairIdList(I))%r(J)  = u_interp%PtFairleadDisplacement%Position(J,I) + u_interp%PtFairleadDisplacement%TranslationDisp(J,I) 
+            other%ConnectList(other%FairIdList(I))%rd(J) = 0.0_ReKi !u_interp%PtFairleadDisplacement%TranslationVel(J,I)  ! is this right? <<<
          END DO
       END DO
 
@@ -548,7 +537,7 @@ CONTAINS
    !========================================================================================
    SUBROUTINE MD_CalcOutput( t, u, p, x, xd, z, other, y, ErrStat, ErrMsg )
 
-      REAL(DbKi)                     , INTENT(INOUT) :: t
+      REAL(DbKi)                     , INTENT(IN   ) :: t
       TYPE( MD_InputType )           , INTENT(IN   ) :: u       ! INTENT(IN   )
       TYPE( MD_ParameterType )       , INTENT(IN   ) :: p       ! INTENT(IN   )
       TYPE( MD_ContinuousStateType ) , INTENT(IN   ) :: x       ! INTENT(IN   )
@@ -1912,7 +1901,7 @@ CONTAINS
     X_In (:) = REAL( X (:), ReKi )
     Z_In (:) = REAL( Z (:), ReKi )
 
-    print *, 'done Catenary.  N is ', N, ', first three x positions are ', X_In(1), X_In(2), X_In(3)
+    !print *, 'done Catenary.  N is ', N, ', first three x positions are ', X_In(1), X_In(2), X_In(3)
 
 
     END SUBROUTINE Catenary
