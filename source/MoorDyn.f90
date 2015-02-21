@@ -161,7 +161,7 @@ CONTAINS
 
       ! get header information for the FAST output file   <<< what does this mean?
 
-      
+
       !--------------------------------------------------------------------------
       !             create i/o meshes for fairlead positions and forces
       !--------------------------------------------------------------------------
@@ -181,7 +181,7 @@ CONTAINS
 
       DO i = 1,p%NFairs
 
-         ! set position of each node 
+         ! set position of each node
          Pos(1) = other%ConnectList(other%FairIdList(i))%conX ! set initial position of each fairlead i (IFP)
          Pos(2) = other%ConnectList(other%FairIdList(i))%conY
          Pos(3) = other%ConnectList(other%FairIdList(i))%conZ
@@ -211,8 +211,8 @@ CONTAINS
          IF (ErrStat /= ErrID_None) CALL WrScr(TRIM(ErrMsg))             ! temporary
 
       y%PtFairleadLoad%IOS = COMPONENT_OUTPUT  ! duplicate?
-      
-      
+
+
 
       ! --------------------------------------------------------------------
       !   go through all Connects and set position based on input file
@@ -370,7 +370,7 @@ CONTAINS
                EXIT  ! break out of the time stepping loop
             END IF
          END IF
-         
+
          IF (I == ceiling(InitInp%TMaxIC/InitInp%DTIC) ) THEN
             CALL WrScr('  MD_Init: ran dynamic convergence to TMaxIC without convergence')
             !ErrStat = ErrID_Warn
@@ -397,7 +397,7 @@ CONTAINS
 
       p%dtCoupling = DTcoupling  ! not sure if this is "proper"  store coupling time step for use in updatestates
 
-      
+
       ! Give the program description (name, version number, date)
       !InitOut%Ver = ProgDesc('MoorDyn',TRIM(InitOut%version),TRIM(InitOut%compilingData)) ! rhis is a duplicate of above
 
@@ -474,12 +474,12 @@ CONTAINS
       t2 = real(t, ReKi)
 
 
-      ! create space for arrays/meshes in u_interp 
+      ! create space for arrays/meshes in u_interp
       CALL MD_CopyInput(u(1), u_interp, MESH_NEWCOPY, ErrStat2, ErrMsg2)
          CALL CheckError( ErrStat2, ErrMsg2 )
          IF (ErrStat >= AbortErrLev) RETURN
 
-      ! interpolate input mesh to correct time    
+      ! interpolate input mesh to correct time
       CALL MD_Input_ExtrapInterp(u, utimes, u_interp, t, ErrStat2, ErrMsg2)
          CALL CheckError( ErrStat2, ErrMsg2 )
          IF (ErrStat >= AbortErrLev) RETURN
@@ -488,7 +488,7 @@ CONTAINS
       ! go through fairleads and apply motions from driver
       DO I = 1, p%NFairs
          DO J = 1,3
-            other%ConnectList(other%FairIdList(I))%r(J)  = u_interp%PtFairleadDisplacement%Position(J,I) + u_interp%PtFairleadDisplacement%TranslationDisp(J,I) 
+            other%ConnectList(other%FairIdList(I))%r(J)  = u_interp%PtFairleadDisplacement%Position(J,I) + u_interp%PtFairleadDisplacement%TranslationDisp(J,I)
             other%ConnectList(other%FairIdList(I))%rd(J) = 0.0_ReKi !u_interp%PtFairleadDisplacement%TranslationVel(J,I)  ! is this right? <<<
          END DO
       END DO
@@ -846,10 +846,10 @@ CONTAINS
  !     print *, ' r(1,...) are ', Line%r(1,:)
 
       ! calculate instantaneous (stretched) segment lengths and rates << should add catch here for if lstr is ever zero
-      DO I = 0, N-1
+      DO I = 1, N
         Sum1 = 0.0_ReKi
         DO J = 1, 3
-          Sum1 = Sum1 + (Line%r(J,I+1) - Line%r(J,I))*(Line%r(J,I+1) - Line%r(J,I))
+          Sum1 = Sum1 + (Line%r(J,I) - Line%r(J,I-1))*(Line%r(J,I) - Line%r(J,I-1))
         END DO
         Line%lstr(I) = sqrt(Sum1)                                ! stretched segment length
 
@@ -857,7 +857,7 @@ CONTAINS
 
         Sum1 = 0.0_ReKi
         DO J = 1, 3
-          Sum1 = Sum1 + (Line%r(J,I+1) - Line%r(J,I))*(Line%rd(J,I+1) - Line%rd(J,I))
+          Sum1 = Sum1 + (Line%r(J,I) - Line%r(J,I-1))*(Line%rd(J,I) - Line%rd(J,I-1))
         END DO
         Line%lstrd(I) = Sum1/Line%lstr(I)                        ! strain rate of segment
 
@@ -878,14 +878,14 @@ CONTAINS
       !calculate mass (including added mass) matrix for each node
       DO I = 0, N
         IF (I==0) THEN
-          m_i = Pi/8.0 *d*d*Line%l(0)*rho
-          v_i = 0.5 *Line%V(I)
+          m_i = Pi/8.0 *d*d*Line%l(1)*rho
+          v_i = 0.5 *Line%V(1)
         ELSE IF (I==N) THEN
-          m_i = pi/8.0 *d*d*Line%l(N-1)*rho;
-          v_i = 0.5*Line%V(I-1)
+          m_i = pi/8.0 *d*d*Line%l(N)*rho;
+          v_i = 0.5*Line%V(N)
         ELSE
           m_i = pi/8.0 * d*d*rho*(Line%l(I) + Line%l(I+1))
-          v_i = 0.5 *(Line%V(I-1) + Line%V(I))
+          v_i = 0.5 *(Line%V(I) + Line%V(I+1))
         END IF
 
   !      print *, '  m() is ', m_i
@@ -907,12 +907,12 @@ CONTAINS
       ! ------------------  CALCULATE FORCES ON EACH NODE ----------------------------
 
       ! loop through the segments
-      DO I = 0, N-1
+      DO I = 1, N
 
         ! line tension
         IF (Line%lstr(I)/Line%l(I) > 1.0) THEN
           DO J = 1, 3
-            Line%T(J,I) = LineProp%EA *( 1.0/Line%l(I) - 1.0/Line%lstr(I) ) * (Line%r(J,I+1)-Line%r(J,I))
+            Line%T(J,I) = LineProp%EA *( 1.0/Line%l(I) - 1.0/Line%lstr(I) ) * (Line%r(J,I)-Line%r(J,I-1))
           END DO
         ELSE
           DO J = 1, 3
@@ -924,7 +924,7 @@ CONTAINS
 
         ! line internal damping force
         DO J = 1, 3
-          Line%Td(J,I) = LineProp%BA* ( Line%lstrd(I) / Line%l(I) ) * (Line%r(J,I+1)-Line%r(J,I)) / Line%lstr(I)  ! note new form of damping coefficient, BA rather than Cint
+          Line%Td(J,I) = LineProp%BA* ( Line%lstrd(I) / Line%l(I) ) * (Line%r(J,I)-Line%r(J,I-1)) / Line%lstr(I)  ! note new form of damping coefficient, BA rather than Cint
         END DO
       END DO
 
@@ -935,9 +935,9 @@ CONTAINS
 
         !submerged weight (including buoyancy)
         IF (I==0) THEN
-          Line%W(3,I) = Pi/8.0*d*d* Line%l(I)*(rho - p%rhoW) *(-p%g)   ! assuming g is positive
+          Line%W(3,I) = Pi/8.0*d*d* Line%l(1)*(rho - p%rhoW) *(-p%g)   ! assuming g is positive
         ELSE IF (i==N)  THEN
-          Line%W(3,I) = pi/8.0*d*d* Line%l(I)*(rho - p%rhoW) *(-p%g)
+          Line%W(3,I) = pi/8.0*d*d* Line%l(N)*(rho - p%rhoW) *(-p%g)
         ELSE
           Line%W(3,I) = pi/8.0*d*d* (Line%l(I)*(rho - p%rhoW) + Line%l(I+1)*(rho - p%rhoW) )*(-p%g)  ! left in this form for future free surface handling
         END IF
@@ -965,18 +965,18 @@ CONTAINS
         ! transverse and tangenential drag
         IF (I==0) THEN
           DO J = 1, 3
-            Line%Dp(J,I) = 0.25*p%rhoW*LineProp%Cdn*    d*Line%l(I) * MagVp * Vp(J)
-            Line%Dq(J,I) = 0.25*p%rhoW*LineProp%Cdt* Pi*d*Line%l(I) * MagVq * Vq(J)
+            Line%Dp(J,I) = 0.25*p%rhoW*LineProp%Cdn*    d*Line%l(1) * MagVp * Vp(J)
+            Line%Dq(J,I) = 0.25*p%rhoW*LineProp%Cdt* Pi*d*Line%l(1) * MagVq * Vq(J)
           END DO
         ELSE IF (I==N)  THEN
           DO J = 1, 3
-            Line%Dp(J,I) = 0.25*p%rhoW*LineProp%Cdn*    d*Line%l(I-1) * MagVp * Vp(J);
-            Line%Dq(J,I) = 0.25*p%rhoW*LineProp%Cdt* Pi*d*Line%l(I-1) * MagVq * Vq(J)
+            Line%Dp(J,I) = 0.25*p%rhoW*LineProp%Cdn*    d*Line%l(N) * MagVp * Vp(J);
+            Line%Dq(J,I) = 0.25*p%rhoW*LineProp%Cdt* Pi*d*Line%l(N) * MagVq * Vq(J)
           END DO
         ELSE
           DO J = 1, 3
-            Line%Dp(J,I) = 0.25*p%rhoW*LineProp%Cdn*    d*(Line%l(I) + Line%l(I-1)) * MagVp * vp(J);
-            Line%Dq(J,I) = 0.25*p%rhoW*LineProp%Cdt* Pi*d*(Line%l(I) + Line%l(I-1)) * MagVq * vq(J);
+            Line%Dp(J,I) = 0.25*p%rhoW*LineProp%Cdn*    d*(Line%l(I) + Line%l(I+1)) * MagVp * vp(J);
+            Line%Dq(J,I) = 0.25*p%rhoW*LineProp%Cdt* Pi*d*(Line%l(I) + Line%l(I+1)) * MagVq * vq(J);
           END DO
         END IF
 
@@ -984,7 +984,7 @@ CONTAINS
 
         ! bottom contact (stiffness and damping)
         IF (Line%r(3,I) < -p%WtrDpth) THEN
-          Line%B(3,I) = ( (-p%WtrDpth - Line%r(3,I))*p%kBot - Line%rd(3,I)*p%cBot) * 0.5*d*(Line%l(I) + Line%l(I-1) ) ! vertical only for now
+          Line%B(3,I) = ( (-p%WtrDpth - Line%r(3,I))*p%kBot - Line%rd(3,I)*p%cBot) * 0.5*d*(Line%l(I) + Line%l(I+1) ) ! vertical only for now
         ELSE
           Line%B(3,I) = 0.0_ReKi
         END IF
@@ -992,15 +992,15 @@ CONTAINS
         ! total forces
         IF (I==0)  THEN
           DO J = 1, 3
-            Line%F(J,I) = Line%T(J,I)                 + Line%Td(J,I)                  + Line%W(J,I) + Line%Dp(J,I) + Line%Dq(J,I) + Line%B(J,I)
+            Line%F(J,I) = Line%T(J,1)                 + Line%Td(J,1)                  + Line%W(J,I) + Line%Dp(J,I) + Line%Dq(J,I) + Line%B(J,I)
           END DO
         ELSE IF (I==N)  THEN
           DO J = 1, 3
-            Line%F(J,I) =              -Line%T(J,I-1)                - Line%Td(J,I-1) + Line%W(J,I) + Line%Dp(J,I) + Line%Dq(J,I) + Line%B(J,I)
+            Line%F(J,I) =                -Line%T(J,N)                  - Line%Td(J,N) + Line%W(J,I) + Line%Dp(J,I) + Line%Dq(J,I) + Line%B(J,I)
           END DO
         ELSE
           DO J = 1, 3
-            Line%F(J,I) = Line%T(J,I) - Line%T(J,I-1) + Line%Td(J,I) - Line%Td(J,I-1) + Line%W(J,I) + Line%Dp(J,I) + Line%Dq(J,I) + Line%B(J,I)
+            Line%F(J,I) = Line%T(J,I+1) - Line%T(J,I) + Line%Td(J,I+1) - Line%Td(J,I) + Line%W(J,I) + Line%Dp(J,I) + Line%Dq(J,I) + Line%B(J,I)
           END DO
         END IF
 
@@ -1161,7 +1161,7 @@ CONTAINS
         END IF
 
         ! allocate node tangent vectors
-        ALLOCATE ( Line%q(3, N+1), STAT = ErrStat )
+        ALLOCATE ( Line%q(3, 0:N), STAT = ErrStat )
         IF ( ErrStat /= ErrID_None ) THEN
          ErrMsg  = ' Error allocating q array.'
          !CALL CleanUp()
@@ -1177,7 +1177,7 @@ CONTAINS
         END IF
 
         ! assign values for l and V
-        DO J=0,N
+        DO J=1,N
           Line%l(J) = Line%UnstrLen/REAL(N, DbKi)
           Line%V(J) = Line%l(J)*0.25*Pi*LineProp%d*LineProp%d
         END DO
@@ -1191,8 +1191,8 @@ CONTAINS
         END IF
 
         ! allocate node force vectors
-        ALLOCATE ( Line%W(3, N+1), Line%Dp(3, N+1), Line%Dq(3, N+1), Line%Ap(3, N+1), &
-         Line%Aq(3, N+1), Line%B(3, N+1), Line%F(3, N+1), STAT = ErrStat )
+        ALLOCATE ( Line%W(3, 0:N), Line%Dp(3, 0:N), Line%Dq(3, 0:N), Line%Ap(3, 0:N), &
+         Line%Aq(3, 0:N), Line%B(3, 0:N), Line%F(3, 0:N), STAT = ErrStat )
         IF ( ErrStat /= ErrID_None ) THEN
          ErrMsg  = ' Error allocating node force arrays.'
          !CALL CleanUp()
@@ -1200,7 +1200,7 @@ CONTAINS
         END IF
 
         ! set gravity and bottom contact forces to zero initially (because the horizontal components should remain at zero)
-        DO J = 1,N+1
+        DO J = 0,N
           DO K = 1,3
             Line%W(K,J) = 0.0_ReKi
             Line%B(K,J) = 0.0_ReKi
@@ -1208,7 +1208,7 @@ CONTAINS
         END DO
 
         ! allocate mass and inverse mass matrices for each node (including ends)
-        ALLOCATE ( Line%S(3, 3, N+1), Line%M(3, 3, N+1), STAT = ErrStat )
+        ALLOCATE ( Line%S(3, 3, 0:N), Line%M(3, 3, 0:N), STAT = ErrStat )
         IF ( ErrStat /= ErrID_None ) THEN
          ErrMsg  = ' Error allocating T and Td arrays.'
          !CALL CleanUp()
@@ -1310,7 +1310,7 @@ CONTAINS
       ! Assign node arc length locations
       LSNodes(1) = 0.0_ReKi
       DO I=2,N
-        LSNodes(I) = LSNodes(I-1) + Line%l(I-2)  ! note: l index is because line and segment indices start at 0
+        LSNodes(I) = LSNodes(I-1) + Line%l(I-1)  ! note: l index is because line segment indices start at 1
       END DO
       LSNodes(N+1) = Line%UnstrLen  ! ensure the last node length isn't longer than the line due to numerical error
 
@@ -1923,13 +1923,13 @@ CONTAINS
 
     REAL(ReKi)               :: Length
 
-    u = r2 - r1    
-    Length = TwoNorm(u) 
+    u = r2 - r1
+    Length = TwoNorm(u)
 
     if ( .NOT. EqualRealNos(length, 0.0_ReKi ) ) THEN
       u = u / Length
     END IF
-    
+
 
    END SUBROUTINE UnitVector
 
