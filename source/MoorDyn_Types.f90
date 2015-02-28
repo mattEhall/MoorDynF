@@ -172,6 +172,7 @@ IMPLICIT NONE
     REAL(ReKi)  :: kBot      ! bottom stiffness [[Pa/m]]
     REAL(ReKi)  :: cBot      ! bottom damping [[Pa-s/m]]
     REAL(ReKi)  :: dt      ! mooring model time step [[s]]
+    REAL(ReKi)  :: dtM0      ! desired mooring model time step (phase out other parameters) [[s]]
     REAL(ReKi)  :: dtCoupling      ! coupling time step [[s]]
     INTEGER(IntKi)  :: Ndt      ! number of mooring time steps per coupling time step [[]]
     INTEGER(IntKi)  :: NumOuts      ! Number of parameters in the output list (number of outputs requested) [-]
@@ -2587,6 +2588,7 @@ ENDIF
    DstParamData%kBot = SrcParamData%kBot
    DstParamData%cBot = SrcParamData%cBot
    DstParamData%dt = SrcParamData%dt
+   DstParamData%dtM0 = SrcParamData%dtM0
    DstParamData%dtCoupling = SrcParamData%dtCoupling
    DstParamData%Ndt = SrcParamData%Ndt
    DstParamData%NumOuts = SrcParamData%NumOuts
@@ -2673,6 +2675,7 @@ ENDIF
   Re_BufSz   = Re_BufSz   + 1  ! kBot
   Re_BufSz   = Re_BufSz   + 1  ! cBot
   Re_BufSz   = Re_BufSz   + 1  ! dt
+  Re_BufSz   = Re_BufSz   + 1  ! dtM0
   Re_BufSz   = Re_BufSz   + 1  ! dtCoupling
   Int_BufSz  = Int_BufSz  + 1  ! Ndt
   Int_BufSz  = Int_BufSz  + 1  ! NumOuts
@@ -2709,6 +2712,8 @@ ENDDO
   IF ( .NOT. OnlySize ) ReKiBuf ( Re_Xferred:Re_Xferred+(1)-1 ) =  (InData%cBot )
   Re_Xferred   = Re_Xferred   + 1
   IF ( .NOT. OnlySize ) ReKiBuf ( Re_Xferred:Re_Xferred+(1)-1 ) =  (InData%dt )
+  Re_Xferred   = Re_Xferred   + 1
+  IF ( .NOT. OnlySize ) ReKiBuf ( Re_Xferred:Re_Xferred+(1)-1 ) =  (InData%dtM0 )
   Re_Xferred   = Re_Xferred   + 1
   IF ( .NOT. OnlySize ) ReKiBuf ( Re_Xferred:Re_Xferred+(1)-1 ) =  (InData%dtCoupling )
   Re_Xferred   = Re_Xferred   + 1
@@ -2791,6 +2796,8 @@ ENDDO
   OutData%cBot = ReKiBuf ( Re_Xferred )
   Re_Xferred   = Re_Xferred   + 1
   OutData%dt = ReKiBuf ( Re_Xferred )
+  Re_Xferred   = Re_Xferred   + 1
+  OutData%dtM0 = ReKiBuf ( Re_Xferred )
   Re_Xferred   = Re_Xferred   + 1
   OutData%dtCoupling = ReKiBuf ( Re_Xferred )
   Re_Xferred   = Re_Xferred   + 1

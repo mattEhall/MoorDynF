@@ -14,6 +14,7 @@ MODULE MoorDyn
    PUBLIC :: MD_Init
    PUBLIC :: MD_UpdateStates
    PUBLIC :: MD_CalcOutput
+   PUBLIC :: MD_CalcContStateDeriv
    PUBLIC :: MD_End
 
 CONTAINS
@@ -148,7 +149,7 @@ CONTAINS
       END DO
 
       ! allocate state vector and F vector for RK2 based on size just calculated
-      ALLOCATE ( x%states(J), other%F(J), STAT = ErrStat )
+      ALLOCATE ( x%states(J), other%F(J), STAT = ErrStat )  ! other%F is no longer needed <<<<<<<
 
       IF ( ErrStat /= ErrID_None ) THEN
         ErrMsg  = ' Error allocating state vector.'
@@ -298,7 +299,7 @@ CONTAINS
 
 
       ! try writing output for troubleshooting purposes (TEMPORARY)
-      !CALL MDIO_WriteOutputs(-1.0_DbKi, p, other, y, ErrStat, ErrMsg)
+      CALL MDIO_WriteOutputs(-1.0_DbKi, p, other, y, ErrStat, ErrMsg)
 
 
       ! --------------------------------------------------------------------
@@ -328,8 +329,6 @@ CONTAINS
       END DO
 
       t = 0.0_ReKi     ! start time at zero
-      p%Ndt = ceiling(InitInp%DTIC/InitInp%DTmooring)  ! get number of mooring time steps per IC convergence analysis time step
-      p%dt = InitInp%DTIC/p%Ndt                        ! adjusted mooring time step size for IC generation
 
  !     print *, InitInp%DTIC
  !     print *, InitInp%DTmooring
@@ -391,18 +390,15 @@ CONTAINS
       !CALL MDIO_WriteOutputs( 0.0_DbKi, p, other, y, ErrStat, ErrMsg )
 
 
-      ! set time step stuff for actual simulation <<< may want to change this to round the dt as needed every time UpdateStates is called
-      p%Ndt = ceiling(DTcoupling/InitInp%DTmooring)  ! get number of mooring time steps per IC convergence analysis time step
-      p%dt = DTcoupling/p%Ndt                       ! adjusted mooring time step size for IC generation
 
-      p%dtCoupling = DTcoupling  ! not sure if this is "proper"  store coupling time step for use in updatestates
+      p%dtCoupling = DTcoupling  ! (not sure if this is "proper") store coupling time step for use in updatestates
 
 
       ! Give the program description (name, version number, date)
       !InitOut%Ver = ProgDesc('MoorDyn',TRIM(InitOut%version),TRIM(InitOut%compilingData)) ! rhis is a duplicate of above
 
 
-      print *, ' MD_Init: Done.  MoorDyn set up with dt=', p%dt, ' and dtcoupling=', p%dtCoupling
+      print *, ' MD_Init: Done.  MoorDyn set up with desired dt=', p%dtM0, ' and dtcoupling=', p%dtCoupling
 
 
    CONTAINS
@@ -569,6 +565,422 @@ CONTAINS
    !=============================================================================================
 
 
+   !=============================================================================================
+   SUBROUTINE MD_CalcContStateDeriv( t, u, p, x, xd, z, other, dxdt, ErrStat, ErrMsg )
+   ! Tight coupling routine for computing derivatives of continuous states
+   ! this is modelled off what used to be subroutine DoRHSmaster
+
+      REAL(ReKi),                         INTENT(IN )    :: t  ! Current simulation time in seconds
+      TYPE(MD_InputType),            INTENT(IN )    :: u  ! Inputs at t
+      TYPE(MD_ParameterType),        INTENT(IN )    :: p  ! Parameters
+      TYPE(MD_ContinuousStateType),  INTENT(IN )    :: x  ! Continuous states at t
+      TYPE(MD_DiscreteStateType),    INTENT(IN )    :: xd  ! Discrete states at t
+      TYPE(MD_ConstraintStateType),  INTENT(IN )    :: z  ! Constraint states at t
+      TYPE(MD_OtherStateType),       INTENT(INOUT)  :: other  ! Other/optimization states
+      TYPE(MD_ContinuousStateType),  INTENT(  OUT)   :: dxdt  ! Continuous state derivatives at t
+      INTEGER(IntKi),                     INTENT( OUT)   :: ErrStat  ! Error status of the operation
+      CHARACTER(*),                       INTENT( OUT)   :: ErrMsg  ! Error message if ErrStat /= ErrID_None
+
+
+      INTEGER(IntKi)                     :: L ! index
+      INTEGER(IntKi)                     :: J ! index
+      INTEGER(IntKi)                     :: K ! index
+      INTEGER(IntKi)                     :: Istart ! start index of line/connect in state vector
+      INTEGER(IntKi)                     :: Iend ! end index of line/connect in state vector
+
+      ! Initialize ErrStat
+      ErrStat = ErrID_None
+      ErrMsg = ""
+
+
+   !   Real(ReKi), INTENT( IN )  :: X(:)  ! state vector, provided
+   !   Real(ReKi), INTENT( OUT ) :: Xd(:) ! derivative of state vector, returned
+   !   Real(ReKi), INTENT (IN)   :: t    ! instantaneous time
+
+
+      ! allocations of dxdt (as in SubDyn.  "INTENT(OUT) automatically deallocates the arrays on entry, we have to allocate them here")
+
+      ALLOCATE ( dxdt%states(size(x%states)), STAT = ErrStat )   ! should improve this!<<<<<<<<<<<<<<<<
+      IF ( ErrStat /= ErrID_None ) THEN
+          ErrMsg  = ' Error allocating dxdt%states array.'
+          RETURN
+      END IF
+
+
+      ! clear connection force and mass values
+      DO L = 1, p%NConnects
+        DO J = 1,3
+          other%ConnectList(L)%Ftot(J) = 0.0_ReKi
+          other%ConnectList(L)%Ftot(J) = 0.0_ReKi
+          DO K = 1,3
+            other%ConnectList(L)%Mtot(K,J) = 0.0_ReKi
+            other%ConnectList(L)%Mtot(K,J) = 0.0_ReKi
+          END DO
+        END DO
+      END DO
+
+      ! do Line force and acceleration calculations, also add end masses/forces to respective Connects
+      DO L = 1, p%NLines
+        Istart = other%LineStateIndList(L)
+        Iend = Istart + 6*(other%LineList(L)%N-1) - 1
+        CALL DoLineRHS(x%states(Istart:Iend), dxdt%states(Istart:Iend), t, other%LineList(L), &
+          other%LineTypeList(other%LineList(L)%PropsIdNum), &
+          other%ConnectList(other%LineList(L)%FairConnect)%Ftot, other%ConnectList(other%LineList(L)%FairConnect)%Mtot, &
+          other%ConnectList(other%LineList(L)%AnchConnect)%Ftot, other%ConnectList(other%LineList(L)%AnchConnect)%Mtot )
+      END DO
+
+      ! do Connect acceleration calculations
+      DO L = 1, p%NConnects
+        Istart = L*6-5
+        Iend = L*6
+        CALL DoConnectRHS(x%states(Istart:Iend), dxdt%states(Istart:Iend), t, other%ConnectList(L))
+      END DO
+
+   CONTAINS
+
+
+
+    !======================================================================
+    SUBROUTINE DoLineRHS (X, Xd, t, Line, LineProp, FairFtot, FairMtot, AnchFtot, AnchMtot)
+
+      Real(ReKi), INTENT( IN )  :: X(:)               ! state vector, provided
+      Real(ReKi), INTENT( OUT ) :: Xd(:)              ! derivative of state vector, returned
+      Real(ReKi), INTENT (IN)   :: t                  ! instantaneous time
+      TYPE(MD_Line), INTENT (INOUT)  :: Line          ! label for the current line, for convenience
+      TYPE(MD_LineProp), INTENT(IN) :: LineProp       ! the single line property set for the line of interest
+      Real(ReKi), INTENT(INOUT)     :: FairFtot(:)    ! total force on Connect top of line is attached to
+      Real(ReKi), INTENT(INOUT)     :: FairMtot(:,:)  ! total mass of Connect top of line is attached to
+      Real(ReKi), INTENT(INOUT)     :: AnchFtot(:)    ! total force on Connect bottom of line is attached to
+      Real(ReKi), INTENT(INOUT)     :: AnchMtot(:,:)  ! total mass of Connect bottom of line is attached to
+
+
+      INTEGER(IntKi)             :: I         ! index of segments or nodes along line
+      INTEGER(IntKi)             :: J         ! index
+      INTEGER(IntKi)             :: K         ! index
+      INTEGER(IntKi)             :: N         ! number of segments in line
+      Real(ReKi)                 :: d         ! line diameter
+      Real(ReKi)                 :: rho       ! line material density
+      Real(ReKi)                 :: Sum1      ! for summing squares
+      Real(ReKi)                 :: m_i       ! node mass
+      Real(ReKi)                 :: v_i       ! node submerged volume
+      Real(ReKi)                 :: Vi(3)     ! relative water velocity at a given node
+      Real(ReKi)                 :: Vp(3)     ! transverse relative water velocity component at a given node
+      Real(ReKi)                 :: Vq(3)     ! tangential relative water velocity component at a given node
+      Real(ReKi)                 :: SumSqVp   !
+      Real(ReKi)                 :: SumSqVq   !
+      Real(ReKi)                 :: MagVp   !
+      Real(ReKi)                 :: MagVq   !
+
+      N = Line%N                      ! for convenience
+      d = LineProp%d                  ! for convenience
+      rho = LineProp%w/(Pi/4.0*d*d)
+
+
+      ! set end node positions and velocities from connect objects' states
+      DO J = 1, 3
+        Line%r(J,N) = other%ConnectList(Line%FairConnect)%r(J)
+        Line%r(J,0) = other%ConnectList(Line%AnchConnect)%r(J)
+      END DO
+
+      ! set interior node positions and velocities
+      DO I = 1, N-1
+        DO J = 1, 3
+          Line%r(J,I) = X( 3*N-3 + 3*I-3 + J)      ! r(J,I)  = X[3*N-3 + 3*i-3 + J]; // get positions  .. used to start from other%LineStateIndList(Line%IdNum) in whole state vector
+          Line%rd(J,I) = X(         3*I-3 + J)      ! rd(J,I) = X[        3*i-3 + J]; // get velocities
+        END DO
+      END DO
+
+ !     print *, ' r(1,...) are ', Line%r(1,:)
+
+      ! calculate instantaneous (stretched) segment lengths and rates << should add catch here for if lstr is ever zero
+      DO I = 1, N
+        Sum1 = 0.0_ReKi
+        DO J = 1, 3
+          Sum1 = Sum1 + (Line%r(J,I) - Line%r(J,I-1))*(Line%r(J,I) - Line%r(J,I-1))
+        END DO
+        Line%lstr(I) = sqrt(Sum1)                                ! stretched segment length
+
+ !   print *, '  lstr() is ', Line%lstr(I)
+
+        Sum1 = 0.0_ReKi
+        DO J = 1, 3
+          Sum1 = Sum1 + (Line%r(J,I) - Line%r(J,I-1))*(Line%rd(J,I) - Line%rd(J,I-1))
+        END DO
+        Line%lstrd(I) = Sum1/Line%lstr(I)                        ! strain rate of segment
+
+    !    Line%V(I) = Pi/4.0 * d*d*Line%l(I)     !volume attributed to segment
+      END DO
+
+      !calculate unit tangent vectors (q) for each node (including ends)
+      CALL UnitVector(Line%q(:,0), Line%r(:,1), Line%r(:,0)) ! compute unit vector q
+      DO I = 1, N-1
+        CALL UnitVector(Line%q(:,I), Line%r(:,I+1), Line%r(:,I-1)) ! compute unit vector q ... using adjacent two nodes!
+      END DO
+      CALL UnitVector(Line%q(:,N), Line%r(:,N), Line%r(:,N-1))    ! compute unit vector q
+
+
+      ! wave kinematics not implemented yet
+
+
+      !calculate mass (including added mass) matrix for each node
+      DO I = 0, N
+        IF (I==0) THEN
+          m_i = Pi/8.0 *d*d*Line%l(1)*rho
+          v_i = 0.5 *Line%V(1)
+        ELSE IF (I==N) THEN
+          m_i = pi/8.0 *d*d*Line%l(N)*rho;
+          v_i = 0.5*Line%V(N)
+        ELSE
+          m_i = pi/8.0 * d*d*rho*(Line%l(I) + Line%l(I+1))
+          v_i = 0.5 *(Line%V(I) + Line%V(I+1))
+        END IF
+
+  !      print *, '  m() is ', m_i
+
+        DO J=1,3
+          DO K=1,3
+            IF (J==K) THEN
+              Line%M(K,J,I) = m_i + p%rhoW*v_i*( LineProp%Can*(1 - Line%q(J,I)*Line%q(K,I)) + LineProp%Cat*Line%q(J,I)*Line%q(K,I) )
+            ELSE
+              Line%M(K,J,I) = p%rhoW*v_i*( LineProp%Can*(-Line%q(J,I)*Line%q(K,I)) + LineProp%Cat*Line%q(J,I)*Line%q(K,I) )
+            END IF
+          END DO
+        END DO
+
+        CALL Inverse3by3(Line%S(:,:,I), Line%M(:,:,I))   ! invert mass matrix
+      END DO
+
+
+      ! ------------------  CALCULATE FORCES ON EACH NODE ----------------------------
+
+      ! loop through the segments
+      DO I = 1, N
+
+        ! line tension
+        IF (Line%lstr(I)/Line%l(I) > 1.0) THEN
+          DO J = 1, 3
+            Line%T(J,I) = LineProp%EA *( 1.0/Line%l(I) - 1.0/Line%lstr(I) ) * (Line%r(J,I)-Line%r(J,I-1))
+          END DO
+        ELSE
+          DO J = 1, 3
+            Line%T(J,I) = 0.0_ReKi  ! cable can't "push"
+          END DO
+        END if
+
+  !    print *, '  T is ', Line%T(:,I)
+
+        ! line internal damping force
+        DO J = 1, 3
+          Line%Td(J,I) = LineProp%BA* ( Line%lstrd(I) / Line%l(I) ) * (Line%r(J,I)-Line%r(J,I-1)) / Line%lstr(I)  ! note new form of damping coefficient, BA rather than Cint
+        END DO
+      END DO
+
+
+
+      ! loop through the nodes
+      DO I = 0, N
+
+        !submerged weight (including buoyancy)
+        IF (I==0) THEN
+          Line%W(3,I) = Pi/8.0*d*d* Line%l(1)*(rho - p%rhoW) *(-p%g)   ! assuming g is positive
+        ELSE IF (i==N)  THEN
+          Line%W(3,I) = pi/8.0*d*d* Line%l(N)*(rho - p%rhoW) *(-p%g)
+        ELSE
+          Line%W(3,I) = pi/8.0*d*d* (Line%l(I)*(rho - p%rhoW) + Line%l(I+1)*(rho - p%rhoW) )*(-p%g)  ! left in this form for future free surface handling
+        END IF
+
+
+ !     print *, '  W is ', Line%W(:,I)
+
+        !relative flow velocities
+        DO J = 1, 3
+          Vi(J) = 0.0 - Line%rd(J,I)                          ! relative flow velocity over node -- this is where wave velicites would be added
+        END DO
+
+        ! decomponse relative flow into components
+        SumSqVp = 0.0_ReKi                                         ! start sums of squares at zero
+        SumSqVq = 0.0_ReKi
+        DO J = 1, 3
+          Vq(J) = DOT_PRODUCT( Vi , Line%q(:,I) ) * Line%q(J,I);   ! tangential relative flow component
+          Vp(J) = Vi(J) - Vq(J)                                    ! transverse relative flow component
+          SumSqVq = SumSqVq + Vq(J)*Vq(J)
+          SumSqVp = SumSqVp + Vp(J)*Vp(J)
+        END DO
+        MagVp = sqrt(SumSqVp)                                   ! get magnitudes of flow components
+        MagVq = sqrt(SumSqVq)
+
+        ! transverse and tangenential drag
+        IF (I==0) THEN
+          DO J = 1, 3
+            Line%Dp(J,I) = 0.25*p%rhoW*LineProp%Cdn*    d*Line%l(1) * MagVp * Vp(J)
+            Line%Dq(J,I) = 0.25*p%rhoW*LineProp%Cdt* Pi*d*Line%l(1) * MagVq * Vq(J)
+          END DO
+        ELSE IF (I==N)  THEN
+          DO J = 1, 3
+            Line%Dp(J,I) = 0.25*p%rhoW*LineProp%Cdn*    d*Line%l(N) * MagVp * Vp(J);
+            Line%Dq(J,I) = 0.25*p%rhoW*LineProp%Cdt* Pi*d*Line%l(N) * MagVq * Vq(J)
+          END DO
+        ELSE
+          DO J = 1, 3
+            Line%Dp(J,I) = 0.25*p%rhoW*LineProp%Cdn*    d*(Line%l(I) + Line%l(I+1)) * MagVp * vp(J);
+            Line%Dq(J,I) = 0.25*p%rhoW*LineProp%Cdt* Pi*d*(Line%l(I) + Line%l(I+1)) * MagVq * vq(J);
+          END DO
+        END IF
+
+        ! F-K force from fluid acceleration not implemented yet
+
+        ! bottom contact (stiffness and damping)
+        IF (Line%r(3,I) < -p%WtrDpth) THEN
+          Line%B(3,I) = ( (-p%WtrDpth - Line%r(3,I))*p%kBot - Line%rd(3,I)*p%cBot) * 0.5*d*(Line%l(I) + Line%l(I+1) ) ! vertical only for now
+        ELSE
+          Line%B(3,I) = 0.0_ReKi
+        END IF
+
+        ! total forces
+        IF (I==0)  THEN
+          DO J = 1, 3
+            Line%F(J,I) = Line%T(J,1)                 + Line%Td(J,1)                  + Line%W(J,I) + Line%Dp(J,I) + Line%Dq(J,I) + Line%B(J,I)
+          END DO
+        ELSE IF (I==N)  THEN
+          DO J = 1, 3
+            Line%F(J,I) =                -Line%T(J,N)                  - Line%Td(J,N) + Line%W(J,I) + Line%Dp(J,I) + Line%Dq(J,I) + Line%B(J,I)
+          END DO
+        ELSE
+          DO J = 1, 3
+            Line%F(J,I) = Line%T(J,I+1) - Line%T(J,I) + Line%Td(J,I+1) - Line%Td(J,I) + Line%W(J,I) + Line%Dp(J,I) + Line%Dq(J,I) + Line%B(J,I)
+          END DO
+        END IF
+
+      END DO  ! I  - done looping through nodes
+
+
+    ! some checks
+
+!    I = 4
+!    print *, 'N6 (1) l is ', Line%l(I)
+!    print *, 'N6 (1) M11 is ', Line%M(1,1,I)
+!    print *, 'N6 (1) T is ', Line%T(1,I)
+!    print *, 'N6 (1) Td is ', Line%Td(1,I)
+!    print *, 'N6 (1) W is ', Line%W(1,I)
+!    print *, 'N6 (1) Dp is ', Line%Dp(1,I)
+!    print *, 'N6 (1) Dq is ', Line%Dq(1,I)
+!    print *, 'N6 (1) B is ', Line%B(1,I)
+
+
+      ! loop through internal nodes and update their states
+      DO I=1, N-1
+        DO J=1,3
+          ! calculate RHS constant (premultiplying force vector by inverse of mass matrix  ... i.e. rhs = S*Forces)
+          Sum1 = 0.0_ReKi                              ! reset temporary accumulator
+          DO K = 1, 3
+            Sum1 = Sum1 + Line%S(K,J,I) * Line%F(K,I)   ! matrix-vector multiplication [S i]{Forces i}  << double check indices
+          END DO ! K
+
+          ! update states
+          Xd(3*N-3 + 3*I-3 + J) = X(3*I-3 + J);         ! dxdt = V  (velocities)
+          Xd(        3*I-3 + J) = Sum1                ! dVdt = RHS * A  (accelerations)
+        END DO ! J
+      END DO  ! I
+
+      ! add force and mass of end nodes to the Connects they correspond to!
+      DO J = 1,3
+        FairFtot(J) = FairFtot(J) + Line%F(J,N)
+        AnchFtot(J) = AnchFtot(J) + Line%F(J,0)
+        DO K = 1,3
+          FairMtot(K,J) = FairMtot(K,J) + Line%M(K,J,N)
+          AnchMtot(K,J) = AnchMtot(K,J) + Line%M(K,J,0)
+        END DO
+      END DO
+
+    END SUBROUTINE DoLineRHS
+    !=====================================================================
+
+
+    !======================================================================
+    SUBROUTINE DoConnectRHS (X, Xd, t, Connect)  ! by passing with these only am I somehow increasing the compartmentalization/safety of the code???  can I ??
+      !-------------------- RHS calculations for Connects -------------------
+
+      Real(ReKi),       INTENT( IN )    :: X(:)           ! state vector, provided
+      Real(ReKi),       INTENT( OUT )   :: Xd(:)          ! derivative of state vector, returned
+      Real(ReKi),       INTENT (IN)     :: t              ! instantaneous time
+      Type(MD_Connect), INTENT (INOUT)  :: Connect        ! Connect number
+
+
+      INTEGER(IntKi)             :: I         ! index of segments or nodes along line
+      INTEGER(IntKi)             :: J         ! index
+      INTEGER(IntKi)             :: K         ! index
+      Real(ReKi)                 :: Sum1      ! for adding things
+
+
+      ! ----------------------------------------------------------------------------------------------------------
+      ! the force and mass contributions from the attached Lines should already have been added to
+      ! Fto and Mtot by the Line RHS function
+
+      ! add Connect's own forces including buoyancy and weight  (should this only be done for Connect type Connects?)
+      Connect%Ftot(1) = Connect%Ftot(1) + Connect%conFX
+      Connect%Ftot(2) = Connect%Ftot(2) + Connect%conFY
+      Connect%Ftot(3) = Connect%Ftot(3) + Connect%conFZ + Connect%conV*p%rhoW*p%g - Connect%conM*p%g
+
+      ! add Connect's own mass
+      DO J = 1,3
+        Connect%Mtot(J,J) = Connect%Mtot(J,J) + Connect%conM
+      END DO
+
+
+      ! ------ behavior dependant on connect type -------
+
+      IF (Connect%TypeNum==0)  THEN ! fixed type
+        Connect%r(1) = Connect%conX
+        Connect%r(2) = Connect%conY
+        Connect%r(3) = Connect%conZ
+        DO J = 1,3
+          Connect%rd(J) = 0.0_ReKi
+        END DO
+      ELSE IF (Connect%TypeNum==1)  THEN ! vessel type (moves with platform)
+
+        ! fairlead positions are updated from the previous value by integrating the velocity (assumed constant during the driver time step)
+        ! this is done in subroutine TimeStep
+
+      ELSE IF (Connect%TypeNum==2)  THEN ! "connect" type
+
+        IF (EqualRealNos(t, 0.0)) THEN  ! this is old: with current IC gen approach, we skip the first call to the line objects, because they're set AFTER the call to the connects
+
+          DO J = 1,3
+            Xd(3+I) = X(I)        ! velocities - these are unused in integration
+            Xd(I) = 0.0_ReKi           ! accelerations - these are unused in integration
+          END DO
+        ELSE
+          ! from state values, get r and rdot values
+          DO J = 1,3
+            Connect%r(J)  = X(3 + J)   ! get positions
+            Connect%rd(J) = X(J)       ! get velocities
+          END DO
+        END IF
+
+        ! invert node mass matrix
+        CALL Inverse3by3(Connect%S, Connect%Mtot)
+
+        DO J = 1,3
+          ! RHS constant - (premultiplying force vector by inverse of mass matrix  ... i.e. rhs = S*Forces
+          Sum1 = 0.0_ReKi   ! reset accumulator
+          DO K = 1, 3
+            Sum1 = Sum1 + Connect%S(K,J) * Connect%Ftot(K)   !  matrix multiplication [S i]{Forces i}
+          END DO
+
+          ! update states
+          Xd(3 + J) = X(J)          ! dxdt = V    (velocities)
+          Xd(I) = Sum1              ! dVdt = RHS * A  (accelerations)
+        END DO
+      END IF
+
+    END SUBROUTINE DoConnectRHS
+    !=====================================================================
+
+
+
+   END SUBROUTINE MD_CalcContStateDeriv
+   !=============================================================================================
+
 
    !===============================================================================================
    SUBROUTINE MD_End(u, p, x, xd, z, other, y, ErrStat , ErrMsg)
@@ -662,48 +1074,129 @@ CONTAINS
 
 
 
-  !========================================================================================================
-  SUBROUTINE TimeStep ( t, dt, u, p, x, xd, z, other, ErrStat, ErrMsg )
-    REAL(ReKi)                     , INTENT(INOUT) :: t
-    REAL(ReKi)                     , INTENT(IN   ) :: dt      ! - DOES THIS EVEN NEED TO BE PASSED? - OUTER time step size (mooring time step size is stored in p)
-    TYPE( MD_InputType )           , INTENT(IN   ) :: u       ! INTENT(IN   )
-    TYPE( MD_ParameterType )       , INTENT(IN   ) :: p       ! INTENT(IN   )
-    TYPE( MD_ContinuousStateType ) , INTENT(INOUT) :: x
-    TYPE( MD_DiscreteStateType )   , INTENT(IN   ) :: xd      ! INTENT(IN   )
-    TYPE( MD_ConstraintStateType ) , INTENT(IN   ) :: z       ! INTENT(IN   )
-    TYPE( MD_OtherStateType )      , INTENT(INOUT) :: other   ! INTENT(INOUT)
- !   TYPE( MD_OutputType )          , INTENT(INOUT) :: y       ! INTENT(INOUT)
-    INTEGER(IntKi)                 , INTENT(  OUT) :: ErrStat
-    CHARACTER(*)                   , INTENT(  OUT) :: ErrMsg
+   !========================================================================================================
+   SUBROUTINE TimeStep ( t, dtStep, u, p, x, xd, z, other, ErrStat, ErrMsg )
+      REAL(ReKi)                     , INTENT(INOUT) :: t
+      REAL(ReKi)                     , INTENT(IN   ) :: dtStep      ! how long to advance the time for
+      TYPE( MD_InputType )           , INTENT(IN   ) :: u       ! INTENT(IN   )
+      TYPE( MD_ParameterType )       , INTENT(IN   ) :: p       ! INTENT(IN   )
+      TYPE( MD_ContinuousStateType ) , INTENT(INOUT) :: x
+      TYPE( MD_DiscreteStateType )   , INTENT(IN   ) :: xd      ! INTENT(IN   )
+      TYPE( MD_ConstraintStateType ) , INTENT(IN   ) :: z       ! INTENT(IN   )
+      TYPE( MD_OtherStateType )      , INTENT(INOUT) :: other   ! INTENT(INOUT)
+      !   TYPE( MD_OutputType )          , INTENT(INOUT) :: y       ! INTENT(INOUT)
+      INTEGER(IntKi)                 , INTENT(  OUT) :: ErrStat
+      CHARACTER(*)                   , INTENT(  OUT) :: ErrMsg
 
 
-    INTEGER(IntKi)  :: I ! counter
-    INTEGER(IntKi)  :: J ! counter
-    INTEGER(IntKi)  :: K ! counter
+
+      TYPE(MD_ContinuousStateType)                 :: dxdt        ! time derivatives of continuous states
+      INTEGER(IntKi) :: NdtM  ! the number of time steps to make with the mooring model
+      Real(ReKi)     :: dtM   ! the actual time step size to use
+
+      INTEGER(IntKi)  :: I ! counter
+      INTEGER(IntKi)  :: J ! counter
+      INTEGER(IntKi)  :: K ! counter
 
 
-    !loop through line integration time steps
-    DO I = 1, p%Ndt  !for (double ts=t; ts<=t+ICdt-dts; ts+=dts)
-
-      ! try writing output for troubleshooting purposes (TEMPORARY)
-      ! CALL MDIO_WriteOutputs(REAL(t,DbKi) , p, other, ErrStat, ErrMsg)
+      ! round dt to integer number of time steps
+      NdtM = ceiling(dtStep/p%dtM0)           ! get number of mooring time steps to do based on desired time step size
+      dtM = dtStep/NdtM                       ! adjust desired time step to satisfy dt with an integer number of time steps
 
 
-      CALL RK2 (x%states, other%F, t, p%dt, ErrStat, ErrMsg)  ! pass state vector, temporary vector for calculations, instantaneous time, and time step size to integration
-        !rk2 (states, ts, dts )
+      !loop through line integration time steps
+      DO I = 1, NdtM  !for (double ts=t; ts<=t+ICdt-dts; ts+=dts)
 
-      ! update Fairlead positions by integrating velocity and last position (do this AFTER the processing of the time step rather than before)
-      DO J = 1, p%NFairs
-        DO K = 1, 3
-          other%ConnectList(other%FairIdList(J))%r(K) = other%ConnectList(other%FairIdList(J))%r(K) + other%ConnectList(other%FairIdList(J))%rd(K)*p%dt
-        END DO
-      END DO
+         ! -------------------------------------------------------------------------------
+         !       RK2 integrator written here, now calling calculated deriv sub
+         !--------------------------------------------------------------------------------
 
-    END DO
+         ! derivatives of state vector (x%states) are contained in other%dxdt%states
 
-    !is anything else required here at the end???
+         !CALL RHSmaster(X, F, t)                         !f0 = f ( t, x0 );
+         CALL MD_CalcContStateDeriv( t, u, p, x, xd, z, other, dxdt, ErrStat, ErrMsg )
+
+         DO J = 1, size(x%states)
+            x%states(J) = x%states(J) + 0.5*dtM*dxdt%states(J)                  !x1 = x0 + dt*f0/2.0;
+         END DO
+
+         !time = t + dt/2.0
+
+         !CALL RHSmaster(X, F, (t + 0.5*dt) )             !f1 = f ( t1, x1 );
+         CALL MD_CalcContStateDeriv( (t + 0.5*dtM), u, p, x, xd, z, other, dxdt, ErrStat, ErrMsg )
+
+         DO J = 1, size(x%states)
+            x%states(J) = x%states(J) + dtM*dxdt%states(J)
+         END DO
+
+         t = t + dtM  ! update time
+
+
+         !----------------------------------------------------------------------------------
+
+         !CALL RK2 (x%states, other%F, t, p%dt, ErrStat, ErrMsg)  ! pass state vector, temporary vector for calculations, instantaneous time, and time step size to integration
+           !rk2 (states, ts, dts )
+
+
+         ! update Fairlead positions by integrating velocity and last position (do this AFTER the processing of the time step rather than before)
+         DO J = 1, p%NFairs
+           DO K = 1, 3
+             other%ConnectList(other%FairIdList(J))%r(K) = other%ConnectList(other%FairIdList(J))%r(K) + other%ConnectList(other%FairIdList(J))%rd(K)*dtM
+           END DO
+         END DO
+
+      END DO  ! I  time steps
+
+
+      ! destroy dxdt
+      CALL MD_DestroyContState( dxdt, ErrStat, ErrMsg)
+      !   CALL SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'MD_UpdateStates')
+
 
   CONTAINS
+
+
+
+
+    !=====================================================================
+    SUBROUTINE RK2new ( X, F, t, dt, ErrStat, ErrMsg )
+    ! Do RK2 integration
+
+      Real(ReKi),     INTENT( INOUT )   :: X(:) ! state vector
+      Real(ReKi),     INTENT( INOUT )   :: F(:) ! vector used for integration calculations (passed to avoid allocating here)
+      Real(ReKi),     INTENT (INOUT)    :: t    ! time
+      Real(ReKi),     INTENT (IN)       :: dt    ! time step size
+
+      INTEGER,        INTENT(   OUT )   :: ErrStat              ! returns a non-zero value when an error occurs
+      CHARACTER(*),   INTENT(   OUT )   :: ErrMsg               ! Error message if ErrStat /= ErrID_None
+
+      !Real(ReKi)                        :: time
+
+      INTEGER(IntKi)                     :: I ! index
+
+      ErrStat = ErrID_None
+      ErrMsg  = ""
+
+      CALL RHSmaster(X, F, t)                         !f0 = f ( t, x0 );
+
+      DO I = 1, size(X)
+        X(I) = X(I) + 0.5*dt*F(I)                  !x1 = x0 + dt*f0/2.0;
+      END DO
+
+      !time = t + dt/2.0
+
+      CALL RHSmaster(X, F, (t + 0.5*dt) )             !f1 = f ( t1, x1 );
+
+      DO I = 1, size(X)
+        X(I) = X(I) + dt*F(I)
+      END DO
+
+      t = t + dt  ! update time
+
+    END SUBROUTINE RK2new
+    !=================================================================
+
+
 
 
     !=====================================================================
@@ -754,6 +1247,8 @@ CONTAINS
       Real(ReKi), INTENT (IN)   :: t    ! instantaneous time
 
       INTEGER(IntKi)                     :: L ! index
+      INTEGER(IntKi)                     :: J ! index
+      INTEGER(IntKi)                     :: K ! index
       INTEGER(IntKi)                     :: Istart ! start index of line/connect in state vector
       INTEGER(IntKi)                     :: Iend ! end index of line/connect in state vector
 

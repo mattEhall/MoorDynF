@@ -149,12 +149,12 @@ PROGRAM Main
 
   Frmt = '(A10,'//TRIM(Int2LStr(p_MD%NFairs))//'(A1,A10))'
 
-  WRITE(UnOutFile,Frmt)  TRIM( 'Time' ), ( ' ', 'FairTen', I=1,p_MD%NFairs )
+  WRITE(UnOutFile,Frmt)  TRIM( 'Time' ), ' FairX', ( ' ', 'FairTen', I=1,p_MD%NFairs )
 
 
   Frmt = '(A10,'//TRIM(Int2LStr(p_MD%NFairs))//'(A1,A10))'
 
-  WRITE(UnOutFile,Frmt)  TRIM( '(s)' ), ( ' ', TRIM( 'kN' ), I=1,p_MD%NFairs )
+  WRITE(UnOutFile,Frmt)  TRIM( '(s)' ), ' (m)', ( ' ', TRIM( 'kN' ), I=1,p_MD%NFairs )
 
 
 
@@ -302,7 +302,7 @@ PROGRAM Main
 
  !  print *, ' and MDWrOutput is ', MDWrOutput(1:p_MD%NFairs)
 
-   WRITE(UnOutFile,Frmt)  t_global, ( ' ', y_MD%WriteOutput(I), I=1,p_MD%NumOuts )
+   WRITE(UnOutFile,Frmt)  t_global, ' ', MD_Input(1)%PtFairleadDisplacement%TranslationDisp(1,1), ( ' ', y_MD%WriteOutput(I), I=1,p_MD%NumOuts )
 
 
 
