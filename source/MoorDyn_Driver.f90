@@ -53,7 +53,7 @@ PROGRAM Main
   ! -------------------------------------------------------------------------
 
   t_initial = 0.
-  t_final   = 20.0
+  t_final   = 100.0
 
   ! specify time increment; currently, all modules will be time integrated with this increment size
   dt_global = 0.1
@@ -147,12 +147,12 @@ PROGRAM Main
 
   !Write the names of the output parameters:
 
-  Frmt = '(A10,'//TRIM(Int2LStr(p_MD%NFairs))//'(A1,A10))'
+  Frmt = '(A10, A10,'//TRIM(Int2LStr(p_MD%NFairs))//'(A1,A10))'
 
   WRITE(UnOutFile,Frmt)  TRIM( 'Time' ), ' FairX', ( ' ', 'FairTen', I=1,p_MD%NFairs )
 
 
-  Frmt = '(A10,'//TRIM(Int2LStr(p_MD%NFairs))//'(A1,A10))'
+  Frmt = '(A10, A10,'//TRIM(Int2LStr(p_MD%NFairs))//'(A1,A10))'
 
   WRITE(UnOutFile,Frmt)  TRIM( '(s)' ), ' (m)', ( ' ', TRIM( 'kN' ), I=1,p_MD%NFairs )
 
@@ -192,8 +192,8 @@ PROGRAM Main
 
       ! Matt: I haven't figured out the above yet, but I'll move the fairlead positions manually here >>>>>>>>>>>>>>>>
       DO J=1,p_MD%NFairs
-        MD_Input(1)%PtFairleadDisplacement%TranslationDisp(1,J) = 10.0*sin(t_global*Pi*0.2) ! move fairleads sinusoidally in x
-        MD_Input(1)%PtFairleadDisplacement%TranslationVel(1,J) = Pi*2.0*cos(t_global*Pi*0.2) ! adjust fairlead x velocity accordingly
+        MD_Input(1)%PtFairleadDisplacement%TranslationDisp(1,J) = 30.0*sin(t_global*Pi*0.1) ! move fairleads sinusoidally in x
+        MD_Input(1)%PtFairleadDisplacement%TranslationVel(1,J) = Pi*3.0*cos(t_global*Pi*0.1) ! adjust fairlead x velocity accordingly
       END DO
       ! lazy limitation: the above moves each fairlead's x coordinate about zero <<<
 
@@ -232,7 +232,7 @@ PROGRAM Main
                                 MD_Input      , &
                                 MD_InputTimes , &
                                 p_MD          , &
-                                x_MD          , &
+                                x_MD_pred          , &
                                 xd_MD         , &
                                 z_MD          , &
                                 other_MD      , &
@@ -263,7 +263,7 @@ PROGRAM Main
       CALL MD_CalcOutput(t_global    , &
                          MD_Input(1) , &
                          p_MD        , &
-                         x_MD        , &
+                         x_MD_pred        , &
                          xd_MD       , &
                          z_MD        , &
                          other_MD    , &
@@ -273,6 +273,8 @@ PROGRAM Main
       IF (ErrStat.NE.0) THEN
          CALL WrScr(ErrMsg)
       END IF
+
+  !    pause
 
     ! note: position of fairlead nodes in y_MD%PtFairleadLoad is not currently set
 
@@ -296,7 +298,7 @@ PROGRAM Main
 
   ! Write the output parameters to the file
 
-   Frmt = '(F10.4,'//TRIM(Int2LStr(p_MD%NFairs))//'(A1,e10.4))'   ! should evenutally use user specified format?
+   Frmt = '(F10.4, A1, F10.4, '//TRIM(Int2LStr(p_MD%NFairs))//'(A1,e10.4))'   ! should evenutally use user specified format?
 
 !   print *, 'in WriteOutputs, Frmt is ', Frmt
 

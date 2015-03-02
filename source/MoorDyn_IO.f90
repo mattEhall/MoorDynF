@@ -101,7 +101,7 @@ CONTAINS
     ! Passed variables
 
     TYPE(MD_InitInputType), INTENT( INOUT )   :: InitInp              ! the MoorDyn data
-    TYPE(MD_ParameterType),       INTENT(  OUT)     :: p           ! INTENT( OUT) : Parameters
+    TYPE(MD_ParameterType),       INTENT(INOUT)     :: p           ! Parameters
     TYPE(MD_OtherStateType),      INTENT(  OUT)     :: other       ! INTENT( OUT) : Initial other/optimization states
     INTEGER,                      INTENT(   OUT )   :: ErrStat              ! returns a non-zero value when an error occurs
     CHARACTER(*),                 INTENT(   OUT )   :: ErrMsg               ! Error message if ErrStat /= ErrID_None
@@ -559,7 +559,7 @@ CONTAINS
     END IF
 
   !print *, 'NumOuts is ', p%NumOuts
-  print *, '  OutList is ', InitInp%OutList(1:p%NumOuts)
+  !print *, '  OutList is ', InitInp%OutList(1:p%NumOuts)
 
 
      !-------------------------------------------------------------------------------------------------
