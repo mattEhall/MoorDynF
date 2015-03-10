@@ -11,6 +11,11 @@ MODULE MoorDyn_IO
   USE                              MoorDyn_Types
   IMPLICIT                         NONE
 
+  !-------------------
+  !bjj: FIXME: these global variables need to be removed before release
+  !-------------------
+  
+  
   INTEGER(IntKi)                 :: UnOutFile      ! unit number of main output file
 
   !REAL(ReKi),      ALLOCATABLE   :: MDWrOutput(:)  ! one line of output data (duplicate of y%WriteOutput, should fix)
@@ -182,7 +187,7 @@ CONTAINS
 
     IF ( InitInp%Echo ) THEN
 
-        EchoFile = TRIM(FileName)//'.ech'                      ! open an echo file for writing
+        EchoFile = TRIM(p%RootName)//'.ech'                      ! open an echo file for writing
         CALL GetNewUnit( UnEc )
         CALL OpenEcho ( UnEc, EchoFile, ErrStat, ErrMsg )
         IF ( ErrStat /= ErrID_None ) THEN
@@ -586,7 +591,7 @@ CONTAINS
 
 
   ! ====================================================================================================
-  SUBROUTINE MDIO_ProcessOutList(OutList, p, other, y, ErrStat, ErrMsg )
+  SUBROUTINE MDIO_ProcessOutList(OutList, p, other, y, InitOut, ErrStat, ErrMsg )
 
   ! This routine processes the output channels requested by OutList, checking for validity and setting
   ! the p%OutParam structures (of type MD_OutParmType) for each valid output.
@@ -600,6 +605,7 @@ CONTAINS
     TYPE(MD_ParameterType),    INTENT(INOUT)  :: p                           ! The module parameters
     TYPE(MD_OtherStateType),   INTENT(IN)     :: other
     TYPE(MD_OutputType),       INTENT(INOUT)  :: y                           ! Initial system outputs (outputs are not calculated; only the output mesh is initialized)
+    TYPE(MD_InitOutputType),   INTENT(INOUT)  :: InitOut                     ! Output for initialization routine
     INTEGER(IntKi),            INTENT(OUT)    :: ErrStat                     ! The error status code
     CHARACTER(*),              INTENT(OUT)    :: ErrMsg                      ! The error message, if an error occurred
 
@@ -805,13 +811,16 @@ CONTAINS
     END IF
 
     !Allocate WriteOuput
-    ALLOCATE( y%WriteOutput( p%NumOuts),  STAT = ErrStat )
+    ALLOCATE(        y%WriteOutput(  p%NumOuts), &
+              InitOut%WriteOutputHdr(p%NumOuts), &
+              InitOut%WriteOutputUnt(p%NumOuts),  STAT = ErrStat )
     IF ( ErrStat /= ErrID_None ) THEN
       ErrMsg  = ' Error allocating space for y%WriteOutput array.'
       ErrStat = ErrID_Fatal
       RETURN
     END IF
-
+    
+    
     !print *, "y%WriteOutput allocated to size ", size(y%WriteOutput)
 
    ! These variables are to help follow the framework template, but the data in them is simply a copy of data
@@ -819,10 +828,10 @@ CONTAINS
   !  ALLOCATE ( InitOut%WriteOutputHdr(p%NumOuts+p%OutAllint*p%OutAllDims), STAT = ErrStat )
   !  ALLOCATE ( InitOut%WriteOutputUnt(p%NumOuts+p%OutAllint*p%OutAllDims), STAT = ErrStat )
 
-  !   DO I = 1,p%NumOuts+p%OutAllint*p%OutAllDims
-  !    InitOut%WriteOutputHdr(I) = TRIM( p%OutParam(I)%Name  )
-  !    InitOut%WriteOutputUnt(I) = TRIM( p%OutParam(I)%Units )
-  !   END DO
+   DO I = 1,p%NumOuts
+      InitOut%WriteOutputHdr(I) = p%OutParam(I)%Name
+      InitOut%WriteOutputUnt(I) = p%OutParam(I)%Units
+   END DO
 
 
   CONTAINS
@@ -873,7 +882,7 @@ CONTAINS
       IF ( ALLOCATED( p%OutParam ) .AND. p%NumOuts > 0 ) THEN           ! Output has been requested so let's open an output file
 
             ! Open the file for output
-         OutFileName = 'MoorDyn.out'
+         OutFileName = TRIM(p%RootName)//'.out'
          CALL GetNewUnit( UnOutFile )
 
          CALL OpenFOutFile ( UnOutFile, OutFileName, ErrStat, ErrMsg )
@@ -906,7 +915,7 @@ CONTAINS
       DO I = 1,p%NLines
 
          ! Open the file for output
-         OutFileName = 'Line'//TRIM(Int2LStr(I))//'.out'
+         OutFileName = TRIM(p%RootName)//'.Line'//TRIM(Int2LStr(I))//'.out'
          CALL GetNewUnit( UnLineOuts(I) )
 
          CALL OpenFOutFile ( UnLineOuts(I), OutFileName, ErrStat, ErrMsg )
