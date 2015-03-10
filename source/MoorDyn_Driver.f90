@@ -46,6 +46,7 @@ PROGRAM Main
    REAL(ReKi)   :: MDWrOutput(10)        ! one line of output data  ! should allocate in future! <<<
 
    CHARACTER(200)                         :: Frmt                        ! a string to hold a format statement
+   CHARACTER(20)                          :: TempString
 
 
   ! -------------------------------------------------------------------------
@@ -67,6 +68,7 @@ PROGRAM Main
   InitInData_MD%WtrDepth = 200
   InitInData_MD%PtfmInit = (/0.0, 0.0, 0.0, 0.0, 0.0, 0.0/)
   InitInData_MD%FileName = "MoorDyn.dat"
+  InitInData_MD%RootName = "MDdriver"
 
 
   ! @bonnie : is this right? What's a good interp order?
@@ -94,8 +96,10 @@ PROGRAM Main
                InitOutData_MD, &
                ErrStat       , &
                ErrMsg )
-  IF (ErrStat.NE.0) THEN
+  IF (ErrStat > ErrID_None) THEN
       CALL WrScr(ErrMsg)
+      Call WrScr("Error in calling MD_Init.  Driver program terminating.")
+      call EXIT()
    END IF
 
    CALL DispNVD(InitOutData_MD%Ver)
@@ -134,7 +138,7 @@ PROGRAM Main
   CALL GetNewUnit( UnOutFile )
 
   CALL OpenFOutFile ( UnOutFile, OutFileName, ErrStat, ErrMsg )
-  IF ( ErrStat >= AbortErrLev ) THEN
+  IF ( ErrStat > ErrID_None ) THEN
      ErrMsg = ' Error opening MoorDyn-Driver output file: '//TRIM(ErrMsg)
   END IF
 
@@ -167,8 +171,9 @@ PROGRAM Main
    DO n_t_global = 0, n_t_final
       t_global =  t_initial + dt_global*n_t_global
 
+      CALL WrOver('MoorDyn_driver: t = '//Num2LStr(t_global))
 
-  Print *, 'MoorDyn_driver: t = ', t_global
+
 
       !++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
       ! Step 1.a: Extrapolate Inputs (gives predicted values at t+dt

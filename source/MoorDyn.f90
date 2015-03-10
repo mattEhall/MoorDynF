@@ -83,11 +83,14 @@ CONTAINS
          CALL CheckError( ErrStat2, ErrMsg2 )
          IF (ErrStat >= AbortErrLev) RETURN
 
+!      print *, 'read input.'
+
 
       ! process the OutList array and set up the index arrays for the requested output quantities
       CALL MDIO_ProcessOutList(InitInp%OutList, p, other, y, InitOut, ErrStat2, ErrMsg2 )
          CALL CheckError( ErrStat2, ErrMsg2 )
          IF (ErrStat >= AbortErrLev) RETURN
+
 
 
 
@@ -143,7 +146,7 @@ CONTAINS
       END DO
 
       !------------------------------------------------------------------------------------
-      !                               prepare state vectors
+      !                               prepare state vector
       !------------------------------------------------------------------------------------
 
       ! allocate list of starting state vector indices for each line  - does this belong elsewhere?
@@ -162,16 +165,15 @@ CONTAINS
          J = J + 6*(other%LineList(I)%N - 1)  !add 6 state variables for each internal node
       END DO
 
-      ! allocate state vector and F vector for RK2 based on size just calculated
-      ALLOCATE ( x%states(J), other%F(J), STAT = ErrStat )  ! other%F is no longer needed <<<<<<<
-
+      ! allocate state vector for RK2 based on size just calculated
+      ALLOCATE ( x%states(J), STAT = ErrStat )
       IF ( ErrStat /= ErrID_None ) THEN
         ErrMsg  = ' Error allocating state vector.'
         !CALL CleanUp()
         RETURN
       END IF
 
-      CALL WrScr( '  MD_Init: Done allocating variables' )
+      !CALL WrScr( '  MD_Init: Done allocating variables' )
 
 
       ! get header information for the FAST output file   <<< what does this mean?
@@ -315,6 +317,10 @@ CONTAINS
 
       ! try writing output for troubleshooting purposes (TEMPORARY)
       CALL MDIO_WriteOutputs(-1.0_DbKi, p, other, y, ErrStat, ErrMsg)
+      IF ( ErrStat >= AbortErrLev ) THEN
+         ErrMsg = ' Error in MDIO_WriteOutputs: '//TRIM(ErrMsg)
+         RETURN
+      END IF
 
 
       ! --------------------------------------------------------------------
@@ -398,7 +404,7 @@ CONTAINS
       !InitOut%Ver = ProgDesc('MoorDyn',TRIM(InitOut%version),TRIM(InitOut%compilingData)) ! rhis is a duplicate of above
 
 
-      print *, ' MD_Init: Done.  MoorDyn set up with desired dt=', p%dtM0, ' and dtcoupling=', p%dtCoupling
+    !  print *, ' MD_Init: Done.  MoorDyn set up with desired dt=', p%dtM0, ' and dtcoupling=', p%dtCoupling
 
 
    CONTAINS
@@ -558,8 +564,10 @@ CONTAINS
 
       ! calculate outputs (y%WriteOutput) for glue code and write any other outputs to MoorDyn output files
       CALL MDIO_WriteOutputs(REAL(t,DbKi) , p, other, y, ErrStat, ErrMsg)
-
-      ! is any error handling really needed here yet?
+      IF ( ErrStat >= AbortErrLev ) THEN
+         ErrMsg = ' Error in MDIO_WriteOutputs: '//TRIM(ErrMsg)
+         RETURN
+      END IF
 
    END SUBROUTINE MD_CalcOutput
    !=============================================================================================
@@ -978,7 +986,7 @@ CONTAINS
 
 
       ! deallocate data associated with file output
-      CALL MDIO_CloseOutput ( p, ErrStat2, ErrMsg2 )
+      CALL MDIO_CloseOutput ( p, other, ErrStat2, ErrMsg2 )
          CALL CheckError( ErrStat2, ErrMsg2 )
          !IF (ErrStat >= AbortErrLev) RETURN
 

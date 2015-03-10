@@ -89,7 +89,7 @@ IMPLICIT NONE
   TYPE, PUBLIC :: MD_Line
     INTEGER(IntKi)  :: IdNum      ! integer identifier of this Line [-]
     CHARACTER(10)  :: type      ! type of line.  should match one of LineProp names [-]
-    CHARACTER(10)  :: OutFlags      ! string specifying output options and other flags [-]
+    CHARACTER(20)  :: OutFlags      ! string specifying output options and other flags [-]
     INTEGER(IntKi)  :: FairConnect      ! IdNum of Connection at fairlead [-]
     INTEGER(IntKi)  :: AnchConnect      ! IdNum of Connection at anchor [-]
     INTEGER(IntKi)  :: PropsIdNum      ! the IdNum of the associated line properties [-]
@@ -113,6 +113,8 @@ IMPLICIT NONE
     REAL(ReKi) , DIMENSION(:,:), ALLOCATABLE  :: F      ! total force on node [[N]]
     REAL(ReKi) , DIMENSION(:,:,:), ALLOCATABLE  :: S      ! node inverse mass matrix [[kg]]
     REAL(ReKi) , DIMENSION(:,:,:), ALLOCATABLE  :: M      ! node mass matrix [[kg]]
+    INTEGER(IntKi)  :: LineUnOut      ! unit number of line output file [-]
+    REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: LineWrOutput      ! one row of output data for this line [-]
   END TYPE MD_Line
 ! =======================
 ! =========  MD_OutParmType  =======
@@ -149,7 +151,7 @@ IMPLICIT NONE
     TYPE(MD_Line) , DIMENSION(:), ALLOCATABLE  :: LineList      ! array of line properties [-]
     INTEGER(IntKi) , DIMENSION(:), ALLOCATABLE  :: FairIdList      ! array of size NFairs listing the ID of each fairlead (index of ConnectList) []
     INTEGER(IntKi) , DIMENSION(:), ALLOCATABLE  :: LineStateIndList      ! starting index of each line's states in state vector []
-    REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: F      ! thing for RK2 calculation, same size as states [[m] or [m/s]]
+    REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: MDWrOutput      ! Data from time step to be written to a MoorDyn output file [-]
   END TYPE MD_OtherStateType
 ! =======================
 ! =========  MD_ConstraintStateType  =======
@@ -174,6 +176,7 @@ IMPLICIT NONE
     CHARACTER(1024)  :: RootName      ! RootName for writing output files [-]
     TYPE(MD_OutParmType) , DIMENSION(:), ALLOCATABLE  :: OutParam      ! Names and units (and other characteristics) of all requested output parameters [-]
     CHARACTER(1)  :: Delim      ! Column delimiter for output text files [-]
+    INTEGER(IntKi)  :: MDUnOut      ! Unit number of main output file [-]
   END TYPE MD_ParameterType
 ! =======================
 ! =========  MD_InputType  =======
@@ -1063,6 +1066,19 @@ IF (ALLOCATED(SrcLineData%M)) THEN
    END IF
    DstLineData%M = SrcLineData%M
 ENDIF
+   DstLineData%LineUnOut = SrcLineData%LineUnOut
+IF (ALLOCATED(SrcLineData%LineWrOutput)) THEN
+   i1_l = LBOUND(SrcLineData%LineWrOutput,1)
+   i1_u = UBOUND(SrcLineData%LineWrOutput,1)
+   IF (.NOT. ALLOCATED(DstLineData%LineWrOutput)) THEN 
+      ALLOCATE(DstLineData%LineWrOutput(i1_l:i1_u),STAT=ErrStat2)
+      IF (ErrStat2 /= 0) THEN 
+         CALL SetErrStat(ErrID_Fatal, 'Error allocating DstLineData%LineWrOutput.', ErrStat, ErrMsg,'MD_CopyLine')
+         RETURN
+      END IF
+   END IF
+   DstLineData%LineWrOutput = SrcLineData%LineWrOutput
+ENDIF
  END SUBROUTINE MD_CopyLine
 
  SUBROUTINE MD_DestroyLine( LineData, ErrStat, ErrMsg )
@@ -1127,6 +1143,9 @@ ENDIF
 IF (ALLOCATED(LineData%M)) THEN
    DEALLOCATE(LineData%M)
 ENDIF
+IF (ALLOCATED(LineData%LineWrOutput)) THEN
+   DEALLOCATE(LineData%LineWrOutput)
+ENDIF
  END SUBROUTINE MD_DestroyLine
 
  SUBROUTINE MD_PackLine( ReKiBuf, DbKiBuf, IntKiBuf, Indata, ErrStat, ErrMsg, SizeOnly )
@@ -1189,6 +1208,8 @@ ENDIF
   IF ( ALLOCATED(InData%F) )   Re_BufSz    = Re_BufSz    + SIZE( InData%F )  ! F 
   IF ( ALLOCATED(InData%S) )   Re_BufSz    = Re_BufSz    + SIZE( InData%S )  ! S 
   IF ( ALLOCATED(InData%M) )   Re_BufSz    = Re_BufSz    + SIZE( InData%M )  ! M 
+  Int_BufSz  = Int_BufSz  + 1  ! LineUnOut
+  IF ( ALLOCATED(InData%LineWrOutput) )   Re_BufSz    = Re_BufSz    + SIZE( InData%LineWrOutput )  ! LineWrOutput 
   IF ( Re_BufSz  .GT. 0 ) ALLOCATE( ReKiBuf(  Re_BufSz  ) )
   IF ( Db_BufSz  .GT. 0 ) ALLOCATE( DbKiBuf(  Db_BufSz  ) )
   IF ( Int_BufSz .GT. 0 ) ALLOCATE( IntKiBuf( Int_BufSz ) )
@@ -1275,6 +1296,12 @@ ENDIF
   IF ( ALLOCATED(InData%M) ) THEN
     IF ( .NOT. OnlySize ) ReKiBuf ( Re_Xferred:Re_Xferred+(SIZE(InData%M))-1 ) =  PACK(InData%M ,.TRUE.)
     Re_Xferred   = Re_Xferred   + SIZE(InData%M)
+  ENDIF
+  IF ( .NOT. OnlySize ) IntKiBuf ( Int_Xferred:Int_Xferred+(1)-1 ) = (InData%LineUnOut )
+  Int_Xferred   = Int_Xferred   + 1
+  IF ( ALLOCATED(InData%LineWrOutput) ) THEN
+    IF ( .NOT. OnlySize ) ReKiBuf ( Re_Xferred:Re_Xferred+(SIZE(InData%LineWrOutput))-1 ) =  PACK(InData%LineWrOutput ,.TRUE.)
+    Re_Xferred   = Re_Xferred   + SIZE(InData%LineWrOutput)
   ENDIF
  END SUBROUTINE MD_PackLine
 
@@ -1448,6 +1475,15 @@ ENDIF
     OutData%M = UNPACK(ReKiBuf( Re_Xferred:Re_Xferred+(SIZE(OutData%M))-1 ),mask3,OutData%M)
   DEALLOCATE(mask3)
     Re_Xferred   = Re_Xferred   + SIZE(OutData%M)
+  ENDIF
+  OutData%LineUnOut = IntKiBuf ( Int_Xferred )
+  Int_Xferred   = Int_Xferred   + 1
+  IF ( ALLOCATED(OutData%LineWrOutput) ) THEN
+  ALLOCATE(mask1(SIZE(OutData%LineWrOutput,1)))
+  mask1 = .TRUE.
+    OutData%LineWrOutput = UNPACK(ReKiBuf( Re_Xferred:Re_Xferred+(SIZE(OutData%LineWrOutput))-1 ),mask1,OutData%LineWrOutput)
+  DEALLOCATE(mask1)
+    Re_Xferred   = Re_Xferred   + SIZE(OutData%LineWrOutput)
   ENDIF
   Re_Xferred   = Re_Xferred-1
   Db_Xferred   = Db_Xferred-1
@@ -2091,17 +2127,17 @@ IF (ALLOCATED(SrcOtherStateData%LineStateIndList)) THEN
    END IF
    DstOtherStateData%LineStateIndList = SrcOtherStateData%LineStateIndList
 ENDIF
-IF (ALLOCATED(SrcOtherStateData%F)) THEN
-   i1_l = LBOUND(SrcOtherStateData%F,1)
-   i1_u = UBOUND(SrcOtherStateData%F,1)
-   IF (.NOT. ALLOCATED(DstOtherStateData%F)) THEN 
-      ALLOCATE(DstOtherStateData%F(i1_l:i1_u),STAT=ErrStat2)
+IF (ALLOCATED(SrcOtherStateData%MDWrOutput)) THEN
+   i1_l = LBOUND(SrcOtherStateData%MDWrOutput,1)
+   i1_u = UBOUND(SrcOtherStateData%MDWrOutput,1)
+   IF (.NOT. ALLOCATED(DstOtherStateData%MDWrOutput)) THEN 
+      ALLOCATE(DstOtherStateData%MDWrOutput(i1_l:i1_u),STAT=ErrStat2)
       IF (ErrStat2 /= 0) THEN 
-         CALL SetErrStat(ErrID_Fatal, 'Error allocating DstOtherStateData%F.', ErrStat, ErrMsg,'MD_CopyOtherState')
+         CALL SetErrStat(ErrID_Fatal, 'Error allocating DstOtherStateData%MDWrOutput.', ErrStat, ErrMsg,'MD_CopyOtherState')
          RETURN
       END IF
    END IF
-   DstOtherStateData%F = SrcOtherStateData%F
+   DstOtherStateData%MDWrOutput = SrcOtherStateData%MDWrOutput
 ENDIF
  END SUBROUTINE MD_CopyOtherState
 
@@ -2137,8 +2173,8 @@ ENDIF
 IF (ALLOCATED(OtherStateData%LineStateIndList)) THEN
    DEALLOCATE(OtherStateData%LineStateIndList)
 ENDIF
-IF (ALLOCATED(OtherStateData%F)) THEN
-   DEALLOCATE(OtherStateData%F)
+IF (ALLOCATED(OtherStateData%MDWrOutput)) THEN
+   DEALLOCATE(OtherStateData%MDWrOutput)
 ENDIF
  END SUBROUTINE MD_DestroyOtherState
 
@@ -2214,7 +2250,7 @@ DO i1 = LBOUND(InData%LineList,1), UBOUND(InData%LineList,1)
 ENDDO
   IF ( ALLOCATED(InData%FairIdList) )   Int_BufSz   = Int_BufSz   + SIZE( InData%FairIdList )  ! FairIdList 
   IF ( ALLOCATED(InData%LineStateIndList) )   Int_BufSz   = Int_BufSz   + SIZE( InData%LineStateIndList )  ! LineStateIndList 
-  IF ( ALLOCATED(InData%F) )   Re_BufSz    = Re_BufSz    + SIZE( InData%F )  ! F 
+  IF ( ALLOCATED(InData%MDWrOutput) )   Re_BufSz    = Re_BufSz    + SIZE( InData%MDWrOutput )  ! MDWrOutput 
   IF ( Re_BufSz  .GT. 0 ) ALLOCATE( ReKiBuf(  Re_BufSz  ) )
   IF ( Db_BufSz  .GT. 0 ) ALLOCATE( DbKiBuf(  Db_BufSz  ) )
   IF ( Int_BufSz .GT. 0 ) ALLOCATE( IntKiBuf( Int_BufSz ) )
@@ -2280,9 +2316,9 @@ ENDDO
     IF ( .NOT. OnlySize ) IntKiBuf ( Int_Xferred:Int_Xferred+(SIZE(InData%LineStateIndList))-1 ) = PACK(InData%LineStateIndList ,.TRUE.)
     Int_Xferred   = Int_Xferred   + SIZE(InData%LineStateIndList)
   ENDIF
-  IF ( ALLOCATED(InData%F) ) THEN
-    IF ( .NOT. OnlySize ) ReKiBuf ( Re_Xferred:Re_Xferred+(SIZE(InData%F))-1 ) =  PACK(InData%F ,.TRUE.)
-    Re_Xferred   = Re_Xferred   + SIZE(InData%F)
+  IF ( ALLOCATED(InData%MDWrOutput) ) THEN
+    IF ( .NOT. OnlySize ) ReKiBuf ( Re_Xferred:Re_Xferred+(SIZE(InData%MDWrOutput))-1 ) =  PACK(InData%MDWrOutput ,.TRUE.)
+    Re_Xferred   = Re_Xferred   + SIZE(InData%MDWrOutput)
   ENDIF
  END SUBROUTINE MD_PackOtherState
 
@@ -2393,12 +2429,12 @@ ENDDO
   DEALLOCATE(mask1)
     Int_Xferred   = Int_Xferred   + SIZE(OutData%LineStateIndList)
   ENDIF
-  IF ( ALLOCATED(OutData%F) ) THEN
-  ALLOCATE(mask1(SIZE(OutData%F,1)))
+  IF ( ALLOCATED(OutData%MDWrOutput) ) THEN
+  ALLOCATE(mask1(SIZE(OutData%MDWrOutput,1)))
   mask1 = .TRUE.
-    OutData%F = UNPACK(ReKiBuf( Re_Xferred:Re_Xferred+(SIZE(OutData%F))-1 ),mask1,OutData%F)
+    OutData%MDWrOutput = UNPACK(ReKiBuf( Re_Xferred:Re_Xferred+(SIZE(OutData%MDWrOutput))-1 ),mask1,OutData%MDWrOutput)
   DEALLOCATE(mask1)
-    Re_Xferred   = Re_Xferred   + SIZE(OutData%F)
+    Re_Xferred   = Re_Xferred   + SIZE(OutData%MDWrOutput)
   ENDIF
   Re_Xferred   = Re_Xferred-1
   Db_Xferred   = Db_Xferred-1
@@ -2579,6 +2615,7 @@ IF (ALLOCATED(SrcParamData%OutParam)) THEN
    ENDDO
 ENDIF
    DstParamData%Delim = SrcParamData%Delim
+   DstParamData%MDUnOut = SrcParamData%MDUnOut
  END SUBROUTINE MD_CopyParam
 
  SUBROUTINE MD_DestroyParam( ParamData, ErrStat, ErrMsg )
@@ -2657,6 +2694,7 @@ DO i1 = LBOUND(InData%OutParam,1), UBOUND(InData%OutParam,1)
   IF(ALLOCATED(Int_OutParam_Buf)) DEALLOCATE(Int_OutParam_Buf)
 ENDDO
 !  missing buffer for Delim
+  Int_BufSz  = Int_BufSz  + 1  ! MDUnOut
   IF ( Re_BufSz  .GT. 0 ) ALLOCATE( ReKiBuf(  Re_BufSz  ) )
   IF ( Db_BufSz  .GT. 0 ) ALLOCATE( DbKiBuf(  Db_BufSz  ) )
   IF ( Int_BufSz .GT. 0 ) ALLOCATE( IntKiBuf( Int_BufSz ) )
@@ -2702,6 +2740,8 @@ DO i1 = LBOUND(InData%OutParam,1), UBOUND(InData%OutParam,1)
   IF( ALLOCATED(Db_OutParam_Buf) )  DEALLOCATE(Db_OutParam_Buf)
   IF( ALLOCATED(Int_OutParam_Buf) ) DEALLOCATE(Int_OutParam_Buf)
 ENDDO
+  IF ( .NOT. OnlySize ) IntKiBuf ( Int_Xferred:Int_Xferred+(1)-1 ) = (InData%MDUnOut )
+  Int_Xferred   = Int_Xferred   + 1
  END SUBROUTINE MD_PackParam
 
  SUBROUTINE MD_UnPackParam( ReKiBuf, DbKiBuf, IntKiBuf, Outdata, ErrStat, ErrMsg )
@@ -2781,6 +2821,8 @@ DO i1 = LBOUND(OutData%OutParam,1), UBOUND(OutData%OutParam,1)
   ENDIF
   CALL MD_UnPackoutparmtype( Re_OutParam_Buf, Db_OutParam_Buf, Int_OutParam_Buf, OutData%OutParam(i1), ErrStat, ErrMsg ) ! OutParam 
 ENDDO
+  OutData%MDUnOut = IntKiBuf ( Int_Xferred )
+  Int_Xferred   = Int_Xferred   + 1
   Re_Xferred   = Re_Xferred-1
   Db_Xferred   = Db_Xferred-1
   Int_Xferred  = Int_Xferred-1
