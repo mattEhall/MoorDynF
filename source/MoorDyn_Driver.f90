@@ -66,7 +66,7 @@ PROGRAM Main
   InitInData_MD%g        = 9.81
   InitInData_MD%rhoW     = 1025
   InitInData_MD%WtrDepth = 200
-  InitInData_MD%PtfmInit = (/0.0, 0.0, 0.0, 0.0, 0.0, 0.0/)
+  InitInData_MD%PtfmInit = (/0.0, 0.0, 0.0, 0.0, 0.0, 0.0/)  ! initial position of platform (because MoorDyn isn't provided a mesh of fairlead locations initially)
   InitInData_MD%FileName = "MoorDyn.dat"
   InitInData_MD%RootName = "MDdriver"
 

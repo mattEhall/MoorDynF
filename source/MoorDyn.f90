@@ -43,8 +43,9 @@ CONTAINS
       INTEGER(IntKi)                               :: J              ! index
       INTEGER(IntKi)                               :: K              ! index
       INTEGER(IntKi)                               :: N              ! convenience integer for readability: number of segments in the line
-      REAL(ReKi)                                   :: Pos(3)         ! temporary array for setting absolute fairlead positions in mesh
-      REAL(ReKi), ALLOCATABLE                      :: FairTensIC(:,:)      ! array of size Nfairs, 3 to store three latest fairlead tensions of each line
+      REAL(ReKi)                                   :: Pos(3)         ! array for setting absolute fairlead positions in mesh
+      REAL(ReKi)                                   :: TransMat(3,3)  ! rotation matrix for setting fairlead positions correctly if there is initial platform rotation
+      REAL(ReKi), ALLOCATABLE                      :: FairTensIC(:,:)! array of size Nfairs, 3 to store three latest fairlead tensions of each line
       CHARACTER(20)                                :: TempString     ! temporary string for incidental use
       INTEGER(IntKi)                               :: ErrStat2       ! Error status of the operation
       CHARACTER(LEN(ErrMsg))                       :: ErrMsg2        ! Error message if ErrStat2 /= ErrID_None
@@ -71,10 +72,9 @@ CONTAINS
       ! (should remove these values as options from MoorDyn input file for consistency?)
 
       p%g        = InitInp%g
-
       p%WtrDpth  = InitInp%WtrDepth
-
       p%rhoW     = InitInp%rhoW
+
       p%RootName = TRIM(InitInp%RootName)//'.MD'  ! all files written from this module will have this root name
 
 
@@ -83,8 +83,6 @@ CONTAINS
          CALL CheckError( ErrStat2, ErrMsg2 )
          IF (ErrStat >= AbortErrLev) RETURN
 
-!      print *, 'read input.'
-
 
       ! process the OutList array and set up the index arrays for the requested output quantities
       CALL MDIO_ProcessOutList(InitInp%OutList, p, other, y, InitOut, ErrStat2, ErrMsg2 )
@@ -92,47 +90,63 @@ CONTAINS
          IF (ErrStat >= AbortErrLev) RETURN
 
 
-
-
-      CALL WrScr( '  MD_Init: Done reading input file and processing output list' )
-
       !-------------------------------------------------------------------------------------------------
       !          Connect mooring system together and make necessary allocations
       !-------------------------------------------------------------------------------------------------
 
-      ! cycle through Connects and identify Vessel types
+      CALL WrNR( '  Creating mooring system.  ' )
+
+      p%NFairs = 0   ! this is the number of "vessel" type Connections.  being consistent with MAP terminology
+      p%NConns = 0   ! this is the number of "connect" type Connections.  not to be confused with NConnects, the number of Connections
+      p%NAnchs = 0   ! this is the number of "fixed" type Connections.
+
+      ! cycle through Connects and identify Connect types
       DO I = 1, p%NConnects
-      TempString = other%ConnectList(I)%type
-      CALL Conv2UC(TempString)
-      if (TempString == 'FIXED') then
-         other%ConnectList(I)%TypeNum = 0
-      else if (TempString == 'VESSEL') then
-         other%ConnectList(I)%TypeNum = 1
-         p%NFairs = p%NFairs + 1             ! if a vessel connection, increment fairlead counter
-      else if (TempString == 'CONNECT') then
-         other%ConnectList(I)%TypeNum = 2
-      else
-         ErrStat = ErrID_Fatal
-         ErrMsg = ' Error in provided Connect type.  Must be fixed, vessel, or connect.'
-         !CALL CleanUp()
-         RETURN
-      END IF
+         TempString = other%ConnectList(I)%type
+         CALL Conv2UC(TempString)
+         if (TempString == 'FIXED') then
+            other%ConnectList(I)%TypeNum = 0
+            p%NAnchs = p%NAnchs + 1
+         else if (TempString == 'VESSEL') then
+            other%ConnectList(I)%TypeNum = 1
+            p%NFairs = p%NFairs + 1             ! if a vessel connection, increment fairlead counter
+         else if (TempString == 'CONNECT') then
+            other%ConnectList(I)%TypeNum = 2
+            p%NConns = p%NConns + 1
+         else
+            CALL CheckError( ErrID_Fatal, 'Error in provided Connect type.  Must be fixed, vessel, or connect.' )
+            RETURN
+         END IF
       END DO
+
+      CALL WrScr(trim(Num2LStr(p%NFairs))//' fairleads, '//trim(Num2LStr(p%NAnchs))//' anchors, '//trim(Num2LStr(p%NConns))//' connects.')
+
 
       ! allocate fairleads list
       ALLOCATE ( other%FairIdList(p%NFairs), STAT = ErrStat )
       IF ( ErrStat /= ErrID_None ) THEN
-         ErrMsg  = ' Error allocating space for FairIdList array.'
-         !CALL CleanUp()
+         CALL CheckError( ErrID_Fatal, 'Error allocating space for FairIdList array.')
          RETURN
       END IF
 
+      ! allocate connect list
+      ALLOCATE ( other%ConnIdList(p%NConns), STAT = ErrStat )
+      IF ( ErrStat /= ErrID_None ) THEN
+         CALL CheckError( ErrID_Fatal, 'Error allocating space for ConnIdList array.')
+         RETURN
+      END IF
+
+
       ! now go back through and record the fairlead Id numbers (this is all the "connecting" that's required)
       J = 1  ! counter for fairlead number
+      K = 1  ! counter for connect number
       DO I = 1,p%NConnects
          IF (other%ConnectList(I)%TypeNum == 1) THEN
-           other%FairIdList(J) = I             ! if a vessel connection, add ID to fairlead list
+           other%FairIdList(J) = I             ! if a vessel connection, add ID to list
            J = J + 1
+         ELSE IF (other%ConnectList(I)%TypeNum == 2) THEN
+           other%ConnIdList(K) = I             ! if a connect connection, add ID to list
+           K = K + 1
          END IF
       END DO
 
@@ -142,8 +156,8 @@ CONTAINS
          CALL SetupLine( other%LineList(I), other%LineTypeList(other%LineList(I)%PropsIdNum), p%rhoW ,  ErrStat2, ErrMsg2)
             CALL CheckError( ErrStat2, ErrMsg2 )
             IF (ErrStat >= AbortErrLev) RETURN
-
       END DO
+
 
       !------------------------------------------------------------------------------------
       !                               prepare state vector
@@ -152,18 +166,19 @@ CONTAINS
       ! allocate list of starting state vector indices for each line  - does this belong elsewhere?
       ALLOCATE ( other%LineStateIndList(p%NLines), STAT = ErrStat )
       IF ( ErrStat /= ErrID_None ) THEN
-        ErrMsg  = ' Error allocating LineStateIndList array.'
-        !CALL CleanUp()
+        CALL CheckError(ErrID_Fatal, ' Error allocating LineStateIndList array.')
         RETURN
       END IF
 
-      ! J is keeping track of the growing size of the state vector
-      J = p%NConnects*6   ! start index of first line's states (added six state variables for each connection) - could work out a way to avoid states for fairleads and anchors
+
+      ! figure out required size of state vector and how it will be apportioned to Connect and Lines (J is keeping track of the growing size of the state vector)
+      J = p%NConns*6   ! start index of first line's states (added six state variables for each "connect"-type connection)
 
       DO I = 1, p%NLines
          other%LineStateIndList(I) = J+1            ! assign start index of each line
          J = J + 6*(other%LineList(I)%N - 1)  !add 6 state variables for each internal node
       END DO
+
 
       ! allocate state vector for RK2 based on size just calculated
       ALLOCATE ( x%states(J), STAT = ErrStat )
@@ -173,8 +188,6 @@ CONTAINS
         RETURN
       END IF
 
-      !CALL WrScr( '  MD_Init: Done allocating variables' )
-
 
       ! get header information for the FAST output file   <<< what does this mean?
 
@@ -182,9 +195,6 @@ CONTAINS
       !--------------------------------------------------------------------------
       !             create i/o meshes for fairlead positions and forces
       !--------------------------------------------------------------------------
-      ! <<< need to update error handling in this section
-
-      print *, ' making meshes with ', p%NFairs, ' nodes'
 
       ! create input mesh for fairlead kinematics
       CALL MeshCreate(BlankMesh=u%PtFairleadDisplacement , &
@@ -192,90 +202,96 @@ CONTAINS
                     Nnodes=p%NFairs                , &
                     TranslationDisp=.TRUE.         , &
                     TranslationVel=.TRUE.          , &
-                    ErrStat=ErrStat                , &
-                    ErrMess=ErrMsg)
+                    ErrStat=ErrStat2                , &
+                    ErrMess=ErrMsg2)
 
-      IF(ErrStat/=ErrID_None) CALL WrScr(TRIM(ErrMsg))           ! temporary
+      CALL CheckError( ErrStat2, ErrMsg2 )
+      IF (ErrStat >= AbortErrLev) RETURN
 
+
+      !  --------------------------- set up initial condition of each fairlead -------------------------------
       DO i = 1,p%NFairs
 
-         ! set position of each node
-         Pos(1) = other%ConnectList(other%FairIdList(i))%conX ! set initial position of each fairlead i (IFP)
+         Pos(1) = other%ConnectList(other%FairIdList(i))%conX ! set relative position of each fairlead i (I'm pretty sure this is just relative to ptfm origin)
          Pos(2) = other%ConnectList(other%FairIdList(i))%conY
          Pos(3) = other%ConnectList(other%FairIdList(i))%conZ
 
-         CALL MeshPositionNode(u%PtFairleadDisplacement,i,Pos,ErrStat,ErrMsg)! "assign the coordinates of each node in the global coordinate space"
-            IF (ErrStat /= ErrID_None) CALL WrScr(TRIM(ErrMsg))               ! temporary
+         CALL MeshPositionNode(u%PtFairleadDisplacement,i,Pos,ErrStat2,ErrMsg2)! "assign the coordinates of each node in the global coordinate space"
 
-         ! also set velocity of each node to zero (manually) - maybe unnecessary?
+         CALL CheckError( ErrStat2, ErrMsg2 )
+         IF (ErrStat >= AbortErrLev) RETURN
+
+
+         ! set offset position of each node to according to initial platform position
+         CALL SmllRotTrans('initial fairlead positions due to platform rotation', InitInp%PtfmInit(4),InitInp%PtfmInit(5),InitInp%PtfmInit(6), TransMat, '', ErrStat2, ErrMsg2)  ! account for possible platform rotation
+
+         CALL CheckError( ErrStat2, ErrMsg2 )
+         IF (ErrStat >= AbortErrLev) RETURN
+
+         u%PtFairleadDisplacement%TranslationDisp(1,i) = InitInp%PtfmInit(1) + Transmat(1,1)*Pos(1) + Transmat(1,2)*Pos(2) + TransMat(1,3)*Pos(3)
+         u%PtFairleadDisplacement%TranslationDisp(2,i) = InitInp%PtfmInit(2) + Transmat(2,1)*Pos(1) + Transmat(2,2)*Pos(2) + TransMat(2,3)*Pos(3)
+         u%PtFairleadDisplacement%TranslationDisp(3,i) = InitInp%PtfmInit(3) + Transmat(3,1)*Pos(1) + Transmat(3,2)*Pos(2) + TransMat(3,3)*Pos(3)
+         ! ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+         !mth:      Bonnie, is the above correct?
+         ! ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+         ! set velocity of each node to zero
          u%PtFairleadDisplacement%TranslationVel(1,i) = 0.0_ReKi
          u%PtFairleadDisplacement%TranslationVel(2,i) = 0.0_ReKi
          u%PtFairleadDisplacement%TranslationVel(3,i) = 0.0_ReKi
 
+
          ! set each node as a point element
-         CALL MeshConstructElement(u%PtFairleadDisplacement, ELEMENT_POINT, ErrStat, ErrMsg, i)
-            IF (ErrStat /= ErrID_None) CALL WrScr(TRIM(ErrMsg))             ! temporary
+         CALL MeshConstructElement(u%PtFairleadDisplacement, ELEMENT_POINT, ErrStat2, ErrMsg2, i)
+
+         CALL CheckError( ErrStat2, ErrMsg2 )
+         IF (ErrStat >= AbortErrLev) RETURN
 
       END DO    ! I
 
+
       CALL MeshCommit ( u%PtFairleadDisplacement, ErrStat, ErrMsg )
-         IF (ErrStat /= ErrID_None) CALL WrScr(TRIM(ErrMsg))                       ! temporary
+
+      CALL CheckError( ErrStat2, ErrMsg2 )
+      IF (ErrStat >= AbortErrLev) RETURN
 
 
       ! copy the input fairlead kinematics mesh to make the output mesh for fairlead loads, PtFairleadLoad
       CALL MeshCopy ( SrcMesh  = u%PtFairleadDisplacement,   DestMesh = y%PtFairleadLoad, &
                       CtrlCode = MESH_SIBLING,               IOS      = COMPONENT_OUTPUT, &
-          Force    = .TRUE.,                     ErrStat=ErrStat, ErrMess=ErrMsg )
-         IF (ErrStat /= ErrID_None) CALL WrScr(TRIM(ErrMsg))             ! temporary
+                      Force    = .TRUE.,                     ErrStat  = ErrStat2, ErrMess=ErrMsg2 )
 
-      y%PtFairleadLoad%IOS = COMPONENT_OUTPUT  ! duplicate?
-
+      CALL CheckError( ErrStat2, ErrMsg2 )
+      IF (ErrStat >= AbortErrLev) RETURN
 
 
       ! --------------------------------------------------------------------
       !   go through all Connects and set position based on input file
       ! --------------------------------------------------------------------
 
+      ! first do it for all connections (connect and anchor types will be saved)
       DO I = 1, p%NConnects
+         other%ConnectList(I)%r(1) = other%ConnectList(I)%conX
+         other%ConnectList(I)%r(2) = other%ConnectList(I)%conY
+         other%ConnectList(I)%r(3) = other%ConnectList(I)%conZ
+         other%ConnectList(I)%rd(1) = 0.0_ReKi
+         other%ConnectList(I)%rd(2) = 0.0_ReKi
+         other%ConnectList(I)%rd(3) = 0.0_ReKi
+      END DO
 
-         IF ( other%ConnectList(I)%TypeNum == 0 ) THEN  ! fixed type
-            other%ConnectList(I)%r(1) = other%ConnectList(I)%conX
-            other%ConnectList(I)%r(2) = other%ConnectList(I)%conY
-            other%ConnectList(I)%r(3) = other%ConnectList(I)%conZ
-            other%ConnectList(I)%rd(1) = 0.0_ReKi
-            other%ConnectList(I)%rd(2) = 0.0_ReKi
-            other%ConnectList(I)%rd(3) = 0.0_ReKi
-         ELSE IF ( other%ConnectList(I)%TypeNum == 1 ) THEN ! vessel type (fairlead)
+      ! then do it for fairlead types
+      DO I = 1,p%NFairs
+         DO J = 1, 3
+            other%ConnectList(other%FairIdList(I))%r(J)  = u%PtFairleadDisplacement%Position(J,I) + u%PtFairleadDisplacement%TranslationDisp(J,I)
+            other%ConnectList(other%FairIdList(I))%rd(J) = 0.0_ReKi
+         END DO
+      END DO
 
-            ! <<< need to update to account for platform initial position!
-
-            other%ConnectList(I)%r(1) = other%ConnectList(I)%conX  ! this is temporary - doesn't account for platform initial position
-            other%ConnectList(I)%r(2) = other%ConnectList(I)%conY
-            other%ConnectList(I)%r(3) = other%ConnectList(I)%conZ
-            other%ConnectList(I)%rd(1) = 0.0_ReKi
-            other%ConnectList(I)%rd(2) = 0.0_ReKi
-            other%ConnectList(I)%rd(3) = 0.0_ReKi
-
-         !        r[0] = TransMat[0]*conX + TransMat[1]*conY + TransMat[2]*conZ + pX[0];  // x
-         !        r[1] = TransMat[3]*conX + TransMat[4]*conY + TransMat[5]*conZ + pX[1];  // y
-         !        r[2] = TransMat[6]*conX + TransMat[7]*conY + TransMat[8]*conZ + pX[2];  // z
-
-         ELSE IF ( other%ConnectList(I)%TypeNum == 2 ) THEN !connect
-            other%ConnectList(I)%r(1) = other%ConnectList(I)%conX  ! put node at initial guess value supplied in input file
-            other%ConnectList(I)%r(2) = other%ConnectList(I)%conY
-            other%ConnectList(I)%r(3) = other%ConnectList(I)%conZ
-            other%ConnectList(I)%rd(1) = 0.0_ReKi
-            other%ConnectList(I)%rd(2) = 0.0_ReKi
-            other%ConnectList(I)%rd(3) = 0.0_ReKi
-         END IF
-
-         ! write the coordinates to the state vector  (for ALL types! - should fix this so only connection types have states) <<<
-
-         x%states(6*I-5:6*I-3) = other%ConnectList(I)%r
-         x%states(6*I-2:6*I) = other%ConnectList(I)%rd
-
-      END DO  !I = 1, p%NConnects
-
+      ! for connect types, write the coordinates to the state vector
+      DO I = 1,p%NConns
+         x%states(6*I-2:6*I)   = other%ConnectList(other%ConnIdList(I))%r  ! double check order of r vs rd
+         x%states(6*I-5:6*I-3) = other%ConnectList(other%ConnIdList(I))%rd
+      END DO
 
       ! --------------------------------------------------------------------
       !          open output file(s) and write header lines
@@ -314,6 +330,8 @@ CONTAINS
 
       END DO    !I = 1, p%NLines
 
+
+! >>>>>>>>>> edit from here
 
       ! try writing output for troubleshooting purposes (TEMPORARY)
       CALL MDIO_WriteOutputs(-1.0_DbKi, p, other, y, ErrStat, ErrMsg)
@@ -621,6 +639,7 @@ CONTAINS
         END DO
       END DO
 
+
       ! do Line force and acceleration calculations, also add end masses/forces to respective Connects
       DO L = 1, p%NLines
         Istart = other%LineStateIndList(L)
@@ -631,15 +650,30 @@ CONTAINS
           other%ConnectList(other%LineList(L)%AnchConnect)%Ftot, other%ConnectList(other%LineList(L)%AnchConnect)%Mtot )
       END DO
 
-      ! do Connect acceleration calculations
+
+      ! perform connection force and mass calculations
       DO L = 1, p%NConnects
+         ! add Connect's own forces including buoyancy and weight
+         other%ConnectList(L)%Ftot(1) =other%ConnectList(L)%Ftot(1) + other%ConnectList(L)%conFX
+         other%ConnectList(L)%Ftot(2) =other%ConnectList(L)%Ftot(2) + other%ConnectList(L)%conFY
+         other%ConnectList(L)%Ftot(3) =other%ConnectList(L)%Ftot(3) + other%ConnectList(L)%conFZ + other%ConnectList(L)%conV*p%rhoW*p%g - other%ConnectList(L)%conM*p%g
+
+         ! add Connect's own mass
+         DO J = 1,3
+            other%ConnectList(L)%Mtot(J,J) = other%ConnectList(L)%Mtot(J,J) + other%ConnectList(L)%conM
+         END DO
+      END DO  ! L
+
+
+      ! do Connect acceleration calculations - changed to do only connect types
+      DO L = 1, p%NConns
         Istart = L*6-5
         Iend = L*6
-        CALL DoConnectRHS(x%states(Istart:Iend), dxdt%states(Istart:Iend), t, other%ConnectList(L))
+        CALL DoConnectRHS(x%states(Istart:Iend), dxdt%states(Istart:Iend), t, other%ConnectList(other%ConnIDList(L)))
       END DO
 
-   CONTAINS
 
+   CONTAINS
 
 
       !======================================================================
@@ -884,8 +918,8 @@ CONTAINS
       !======================================================================
       SUBROUTINE DoConnectRHS (X, Xd, t, Connect)
 
-         Real(ReKi),       INTENT( IN )    :: X(:)           ! state vector, provided
-         Real(ReKi),       INTENT( OUT )   :: Xd(:)          ! derivative of state vector, returned
+         Real(ReKi),       INTENT( IN )    :: X(:)           ! state vector for this connect, provided
+         Real(ReKi),       INTENT( OUT )   :: Xd(:)          ! derivative of state vector for this connect, returned
          Real(ReKi),       INTENT (IN)     :: t              ! instantaneous time
          Type(MD_Connect), INTENT (INOUT)  :: Connect        ! Connect number
 
@@ -895,36 +929,38 @@ CONTAINS
          INTEGER(IntKi)             :: K         ! index
          Real(ReKi)                 :: Sum1      ! for adding things
 
+         ! below now handled it calling sub
 
-         ! the force and mass contributions from the attached Lines should already have been added to
-         ! Fto and Mtot by the Line RHS function
+!         ! the force and mass contributions from the attached Lines should already have been added to
+!         ! Fto and Mtot by the Line RHS function
+!
+!         ! add Connect's own forces including buoyancy and weight  (should this only be done for Connect type Connects?)
+!         Connect%Ftot(1) = Connect%Ftot(1) + Connect%conFX
+!         Connect%Ftot(2) = Connect%Ftot(2) + Connect%conFY
+!         Connect%Ftot(3) = Connect%Ftot(3) + Connect%conFZ + Connect%conV*p%rhoW*p%g - Connect%conM*p%g
+!
+!         ! add Connect's own mass
+!         DO J = 1,3
+!            Connect%Mtot(J,J) = Connect%Mtot(J,J) + Connect%conM
+!         END DO
 
-         ! add Connect's own forces including buoyancy and weight  (should this only be done for Connect type Connects?)
-         Connect%Ftot(1) = Connect%Ftot(1) + Connect%conFX
-         Connect%Ftot(2) = Connect%Ftot(2) + Connect%conFY
-         Connect%Ftot(3) = Connect%Ftot(3) + Connect%conFZ + Connect%conV*p%rhoW*p%g - Connect%conM*p%g
+         ! below comments to tentatively try only connect types being handled (no anchors or fairleads)
 
-         ! add Connect's own mass
-         DO J = 1,3
-            Connect%Mtot(J,J) = Connect%Mtot(J,J) + Connect%conM
-         END DO
-
-
-         ! ------ behavior dependant on connect type -------
-
-         IF (Connect%TypeNum==0)  THEN ! fixed type
-            Connect%r(1) = Connect%conX
-            Connect%r(2) = Connect%conY
-            Connect%r(3) = Connect%conZ
-            DO J = 1,3
-               Connect%rd(J) = 0.0_ReKi
-            END DO
-         ELSE IF (Connect%TypeNum==1)  THEN ! vessel type (moves with platform)
-
-           ! fairlead positions are updated from the previous value by integrating the velocity (assumed constant during the driver time step)
-           ! this is done in subroutine TimeStep
-
-         ELSE IF (Connect%TypeNum==2)  THEN ! "connect" type
+ !        ! ------ behavior dependant on connect type -------
+!
+!         IF (Connect%TypeNum==0)  THEN ! fixed type
+!            Connect%r(1) = Connect%conX
+!            Connect%r(2) = Connect%conY
+!            Connect%r(3) = Connect%conZ
+!            DO J = 1,3
+!               Connect%rd(J) = 0.0_ReKi
+!            END DO
+!         ELSE IF (Connect%TypeNum==1)  THEN ! vessel type (moves with platform)
+!
+!           ! fairlead positions are updated from the previous value by integrating the velocity (assumed constant during the driver time step)
+!           ! this is done in subroutine TimeStep
+!
+!         ELSE IF (Connect%TypeNum==2)  THEN ! "connect" type
 
             IF (EqualRealNos(t, 0.0)) THEN  ! this is old: with current IC gen approach, we skip the first call to the line objects, because they're set AFTER the call to the connects
 
@@ -954,7 +990,7 @@ CONTAINS
                Xd(3 + J) = X(J)          ! dxdt = V    (velocities)
                Xd(I) = Sum1              ! dVdt = RHS * A  (accelerations)
             END DO
-         END IF
+!         END IF
 
       END SUBROUTINE DoConnectRHS
       !=====================================================================

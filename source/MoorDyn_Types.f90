@@ -150,6 +150,7 @@ IMPLICIT NONE
     TYPE(MD_Connect) , DIMENSION(:), ALLOCATABLE  :: ConnectList      ! array of connection properties [-]
     TYPE(MD_Line) , DIMENSION(:), ALLOCATABLE  :: LineList      ! array of line properties [-]
     INTEGER(IntKi) , DIMENSION(:), ALLOCATABLE  :: FairIdList      ! array of size NFairs listing the ID of each fairlead (index of ConnectList) []
+    INTEGER(IntKi) , DIMENSION(:), ALLOCATABLE  :: ConnIdList      ! array of size NConnss listing the ID of each connect type connection (index of ConnectList) []
     INTEGER(IntKi) , DIMENSION(:), ALLOCATABLE  :: LineStateIndList      ! starting index of each line's states in state vector []
     REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: MDWrOutput      ! Data from time step to be written to a MoorDyn output file [-]
   END TYPE MD_OtherStateType
@@ -163,8 +164,10 @@ IMPLICIT NONE
   TYPE, PUBLIC :: MD_ParameterType
     INTEGER(IntKi)  :: NTypes      ! number of line types []
     INTEGER(IntKi)  :: NConnects      ! number of Connection objects []
-    INTEGER(IntKi)  :: NLines      ! number of Line objects []
     INTEGER(IntKi)  :: NFairs      ! number of Fairlead Connections []
+    INTEGER(IntKi)  :: NConns      ! number of Connect type Connections - not to be confused with NConnects []
+    INTEGER(IntKi)  :: NAnchs      ! number of Anchor type Connections []
+    INTEGER(IntKi)  :: NLines      ! number of Line objects []
     REAL(ReKi)  :: g = 9.81      ! gravitational constant [[kg/m^2]]
     REAL(ReKi)  :: rhoW      ! density of seawater [[m]]
     REAL(ReKi)  :: WtrDpth      ! water depth [[m]]
@@ -2115,6 +2118,18 @@ IF (ALLOCATED(SrcOtherStateData%FairIdList)) THEN
    END IF
    DstOtherStateData%FairIdList = SrcOtherStateData%FairIdList
 ENDIF
+IF (ALLOCATED(SrcOtherStateData%ConnIdList)) THEN
+   i1_l = LBOUND(SrcOtherStateData%ConnIdList,1)
+   i1_u = UBOUND(SrcOtherStateData%ConnIdList,1)
+   IF (.NOT. ALLOCATED(DstOtherStateData%ConnIdList)) THEN 
+      ALLOCATE(DstOtherStateData%ConnIdList(i1_l:i1_u),STAT=ErrStat2)
+      IF (ErrStat2 /= 0) THEN 
+         CALL SetErrStat(ErrID_Fatal, 'Error allocating DstOtherStateData%ConnIdList.', ErrStat, ErrMsg,'MD_CopyOtherState')
+         RETURN
+      END IF
+   END IF
+   DstOtherStateData%ConnIdList = SrcOtherStateData%ConnIdList
+ENDIF
 IF (ALLOCATED(SrcOtherStateData%LineStateIndList)) THEN
    i1_l = LBOUND(SrcOtherStateData%LineStateIndList,1)
    i1_u = UBOUND(SrcOtherStateData%LineStateIndList,1)
@@ -2169,6 +2184,9 @@ ENDDO
 ENDIF
 IF (ALLOCATED(OtherStateData%FairIdList)) THEN
    DEALLOCATE(OtherStateData%FairIdList)
+ENDIF
+IF (ALLOCATED(OtherStateData%ConnIdList)) THEN
+   DEALLOCATE(OtherStateData%ConnIdList)
 ENDIF
 IF (ALLOCATED(OtherStateData%LineStateIndList)) THEN
    DEALLOCATE(OtherStateData%LineStateIndList)
@@ -2249,6 +2267,7 @@ DO i1 = LBOUND(InData%LineList,1), UBOUND(InData%LineList,1)
   IF(ALLOCATED(Int_LineList_Buf)) DEALLOCATE(Int_LineList_Buf)
 ENDDO
   IF ( ALLOCATED(InData%FairIdList) )   Int_BufSz   = Int_BufSz   + SIZE( InData%FairIdList )  ! FairIdList 
+  IF ( ALLOCATED(InData%ConnIdList) )   Int_BufSz   = Int_BufSz   + SIZE( InData%ConnIdList )  ! ConnIdList 
   IF ( ALLOCATED(InData%LineStateIndList) )   Int_BufSz   = Int_BufSz   + SIZE( InData%LineStateIndList )  ! LineStateIndList 
   IF ( ALLOCATED(InData%MDWrOutput) )   Re_BufSz    = Re_BufSz    + SIZE( InData%MDWrOutput )  ! MDWrOutput 
   IF ( Re_BufSz  .GT. 0 ) ALLOCATE( ReKiBuf(  Re_BufSz  ) )
@@ -2311,6 +2330,10 @@ ENDDO
   IF ( ALLOCATED(InData%FairIdList) ) THEN
     IF ( .NOT. OnlySize ) IntKiBuf ( Int_Xferred:Int_Xferred+(SIZE(InData%FairIdList))-1 ) = PACK(InData%FairIdList ,.TRUE.)
     Int_Xferred   = Int_Xferred   + SIZE(InData%FairIdList)
+  ENDIF
+  IF ( ALLOCATED(InData%ConnIdList) ) THEN
+    IF ( .NOT. OnlySize ) IntKiBuf ( Int_Xferred:Int_Xferred+(SIZE(InData%ConnIdList))-1 ) = PACK(InData%ConnIdList ,.TRUE.)
+    Int_Xferred   = Int_Xferred   + SIZE(InData%ConnIdList)
   ENDIF
   IF ( ALLOCATED(InData%LineStateIndList) ) THEN
     IF ( .NOT. OnlySize ) IntKiBuf ( Int_Xferred:Int_Xferred+(SIZE(InData%LineStateIndList))-1 ) = PACK(InData%LineStateIndList ,.TRUE.)
@@ -2421,6 +2444,13 @@ ENDDO
     OutData%FairIdList = UNPACK(IntKiBuf( Int_Xferred:Re_Xferred+(SIZE(OutData%FairIdList))-1 ),mask1,OutData%FairIdList)
   DEALLOCATE(mask1)
     Int_Xferred   = Int_Xferred   + SIZE(OutData%FairIdList)
+  ENDIF
+  IF ( ALLOCATED(OutData%ConnIdList) ) THEN
+  ALLOCATE(mask1(SIZE(OutData%ConnIdList,1)))
+  mask1 = .TRUE.
+    OutData%ConnIdList = UNPACK(IntKiBuf( Int_Xferred:Re_Xferred+(SIZE(OutData%ConnIdList))-1 ),mask1,OutData%ConnIdList)
+  DEALLOCATE(mask1)
+    Int_Xferred   = Int_Xferred   + SIZE(OutData%ConnIdList)
   ENDIF
   IF ( ALLOCATED(OutData%LineStateIndList) ) THEN
   ALLOCATE(mask1(SIZE(OutData%LineStateIndList,1)))
@@ -2587,8 +2617,10 @@ ENDIF
    ErrMsg  = ""
    DstParamData%NTypes = SrcParamData%NTypes
    DstParamData%NConnects = SrcParamData%NConnects
-   DstParamData%NLines = SrcParamData%NLines
    DstParamData%NFairs = SrcParamData%NFairs
+   DstParamData%NConns = SrcParamData%NConns
+   DstParamData%NAnchs = SrcParamData%NAnchs
+   DstParamData%NLines = SrcParamData%NLines
    DstParamData%g = SrcParamData%g
    DstParamData%rhoW = SrcParamData%rhoW
    DstParamData%WtrDpth = SrcParamData%WtrDpth
@@ -2673,8 +2705,10 @@ ENDIF
   Int_BufSz  = 0
   Int_BufSz  = Int_BufSz  + 1  ! NTypes
   Int_BufSz  = Int_BufSz  + 1  ! NConnects
-  Int_BufSz  = Int_BufSz  + 1  ! NLines
   Int_BufSz  = Int_BufSz  + 1  ! NFairs
+  Int_BufSz  = Int_BufSz  + 1  ! NConns
+  Int_BufSz  = Int_BufSz  + 1  ! NAnchs
+  Int_BufSz  = Int_BufSz  + 1  ! NLines
   Re_BufSz   = Re_BufSz   + 1  ! g
   Re_BufSz   = Re_BufSz   + 1  ! rhoW
   Re_BufSz   = Re_BufSz   + 1  ! WtrDpth
@@ -2702,9 +2736,13 @@ ENDDO
   Int_Xferred   = Int_Xferred   + 1
   IF ( .NOT. OnlySize ) IntKiBuf ( Int_Xferred:Int_Xferred+(1)-1 ) = (InData%NConnects )
   Int_Xferred   = Int_Xferred   + 1
-  IF ( .NOT. OnlySize ) IntKiBuf ( Int_Xferred:Int_Xferred+(1)-1 ) = (InData%NLines )
-  Int_Xferred   = Int_Xferred   + 1
   IF ( .NOT. OnlySize ) IntKiBuf ( Int_Xferred:Int_Xferred+(1)-1 ) = (InData%NFairs )
+  Int_Xferred   = Int_Xferred   + 1
+  IF ( .NOT. OnlySize ) IntKiBuf ( Int_Xferred:Int_Xferred+(1)-1 ) = (InData%NConns )
+  Int_Xferred   = Int_Xferred   + 1
+  IF ( .NOT. OnlySize ) IntKiBuf ( Int_Xferred:Int_Xferred+(1)-1 ) = (InData%NAnchs )
+  Int_Xferred   = Int_Xferred   + 1
+  IF ( .NOT. OnlySize ) IntKiBuf ( Int_Xferred:Int_Xferred+(1)-1 ) = (InData%NLines )
   Int_Xferred   = Int_Xferred   + 1
   IF ( .NOT. OnlySize ) ReKiBuf ( Re_Xferred:Re_Xferred+(1)-1 ) =  (InData%g )
   Re_Xferred   = Re_Xferred   + 1
@@ -2784,9 +2822,13 @@ ENDDO
   Int_Xferred   = Int_Xferred   + 1
   OutData%NConnects = IntKiBuf ( Int_Xferred )
   Int_Xferred   = Int_Xferred   + 1
-  OutData%NLines = IntKiBuf ( Int_Xferred )
-  Int_Xferred   = Int_Xferred   + 1
   OutData%NFairs = IntKiBuf ( Int_Xferred )
+  Int_Xferred   = Int_Xferred   + 1
+  OutData%NConns = IntKiBuf ( Int_Xferred )
+  Int_Xferred   = Int_Xferred   + 1
+  OutData%NAnchs = IntKiBuf ( Int_Xferred )
+  Int_Xferred   = Int_Xferred   + 1
+  OutData%NLines = IntKiBuf ( Int_Xferred )
   Int_Xferred   = Int_Xferred   + 1
   OutData%g = ReKiBuf ( Re_Xferred )
   Re_Xferred   = Re_Xferred   + 1

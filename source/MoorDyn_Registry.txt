@@ -122,6 +122,7 @@ typedef   ^       OtherStateType       MD_LineProp         LineTypeList     {:} 
 typedef   ^       ^                    MD_Connect          ConnectList      {:}  -  -   "array of connection properties"   -   
 typedef   ^       ^                    MD_Line             LineList         {:}  -  -   "array of line properties"   -  
 typedef   ^       ^                    IntKi               FairIdList       {:}  -  -   "array of size NFairs listing the ID of each fairlead (index of ConnectList)"         ""
+typedef   ^       ^                    IntKi               ConnIdList       {:}  -  -   "array of size NConnss listing the ID of each connect type connection (index of ConnectList)"         ""
 typedef   ^       ^                    IntKi               LineStateIndList {:}  -  -   "starting index of each line's states in state vector"                 ""
 typedef   ^       ^                    ReKi                MDWrOutput       {:}  -  -   "Data from time step to be written to a MoorDyn output file"
 
@@ -133,8 +134,10 @@ typedef   ^       ConstraintStateType  ReKi                dummy            {:} 
 ## ============================== Parameters ============================================================================================================================================
 typedef   ^       ParameterType        IntKi               NTypes         -     -    -   "number of line types"                       ""
 typedef   ^       ^                    IntKi               NConnects      -     -    -   "number of Connection objects"               ""
-typedef   ^       ^                    IntKi               NLines         -     -    -   "number of Line objects"                     ""
 typedef   ^       ^                    IntKi               NFairs         -     -    -   "number of Fairlead Connections"             ""
+typedef   ^       ^                    IntKi               NConns         -     -    -   "number of Connect type Connections - not to be confused with NConnects"             ""
+typedef   ^       ^                    IntKi               NAnchs         -     -    -   "number of Anchor type Connections"             ""
+typedef   ^       ^                    IntKi               NLines         -     -    -   "number of Line objects"                     ""
 typedef   ^       ^                    ReKi                g              -  9.81    -   "gravitational constant"          "[kg/m^2]"
 typedef   ^       ^                    ReKi                rhoW           -     -    -   "density of seawater"              "[m]"
 typedef   ^       ^                    ReKi                WtrDpth        -     -    -   "water depth"                      "[m]"
