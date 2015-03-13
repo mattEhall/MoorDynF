@@ -331,8 +331,6 @@ CONTAINS
       END DO    !I = 1, p%NLines
 
 
-! >>>>>>>>>> edit from here
-
       ! try writing output for troubleshooting purposes (TEMPORARY)
       CALL MDIO_WriteOutputs(-1.0_DbKi, p, other, y, ErrStat, ErrMsg)
       IF ( ErrStat >= AbortErrLev ) THEN
@@ -345,7 +343,7 @@ CONTAINS
       !           do dynamic relaxation to get ICs
       ! --------------------------------------------------------------------
 
-      CALL WrScr("  MD_Init: Finalizing ICs using dynamic relaxation.")
+      CALL WrScr("  MD_Init: Finalizing ICs using dynamic relaxation."//NewLine)
 
       ! boost drag coefficient of each line type
       DO I = 1, p%NTypes
@@ -356,7 +354,7 @@ CONTAINS
       ! allocate array holding three latest fairlead tensions
       ALLOCATE ( FairTensIC(p%NFairs,3), STAT = ErrStat )
       IF ( ErrStat /= ErrID_None ) THEN
-         ErrMsg  = ' Error allocating FairTensIC array.'
+         CALL CheckError( ErrID_Fatal, ErrMsg2 )
          RETURN
       END IF
 
@@ -377,13 +375,16 @@ CONTAINS
          CALL TimeStep ( t, InitInp%DTIC, u, p, x, xd, z, other, ErrStat, ErrMsg )
 
 
-         ! store previous fairlead tensions for comparison
+         ! store new fairlead tension (and previous fairlead tensions for comparison)
          DO J = 1, p%NFairs
             FairTensIC(J,3) = FairTensIC(J,2)
             FairTensIC(J,2) = FairTensIC(J,1)
             FairTensIC(J,1) = TwoNorm(other%ConnectList(other%FairIdList(J))%Ftot(:))
          END DO
 
+         ! provide status message
+         CALL WrOver('  t='//trim(Num2LStr(t))//'  FairTen 1: '//trim(Num2LStr(FairTensIC(1,1)))// &
+                        ', '//trim(Num2LStr(FairTensIC(1,2)))//', '//trim(Num2LStr(FairTensIC(1,3))))
 
          ! check for convergence (compare current tension at each fairlead with previous two values)
          IF (I > 2) THEN
@@ -394,13 +395,13 @@ CONTAINS
             END DO
 
             IF (J == p%NFairs) THEN   ! if we made it with all cases satisfying the threshold
-               print *, ' MD_Init: Fairlead tensions converged to ', 100.0*InitInp%threshIC, ' percent after ', t , ' seconds.'
+               CALL WrScr('  Fairlead tensions converged to '//trim(Num2LStr(100.0*InitInp%threshIC))//'% after '//trim(Num2LStr(t))//' seconds.')
                EXIT  ! break out of the time stepping loop
             END IF
          END IF
 
          IF (I == ceiling(InitInp%TMaxIC/InitInp%DTIC) ) THEN
-            CALL WrScr('  MD_Init: ran dynamic convergence to TMaxIC without convergence')
+            CALL WrScr('  Fairlead tensions did not converge within TMaxIC='//trim(Num2LStr(InitInp%TMaxIC))//' seconds.')
             !ErrStat = ErrID_Warn
             !ErrMsg = '  MD_Init: ran dynamic convergence to TMaxIC without convergence'
          END IF
@@ -568,11 +569,32 @@ CONTAINS
       INTEGER(IntKi)                 , INTENT(INOUT) :: ErrStat
       CHARACTER(*)                   , INTENT(INOUT) :: ErrMsg
 
-      INTEGER(IntKi)                                 :: I        ! counter
-      INTEGER(IntKi)                                 :: J        ! counter
+      TYPE(MD_ContinuousStateType)                   :: dxdt    ! time derivatives of continuous states (initialized in CalcContStateDeriv)
+      INTEGER(IntKi)                                 :: I       ! counter
+      INTEGER(IntKi)                                 :: J       ! counter
+      REAL(ReKi)                                     :: t2      ! real version of t (double)
+
+      INTEGER(IntKi)                                 :: ErrStat2   ! Error status of the operation
+      CHARACTER(LEN(ErrMsg))                         :: ErrMsg2    ! Error message if ErrStat2 /= ErrID_None
 
 
-      ! assign net force on fairlead Connects to the outputs
+      ! below updated to make sure outputs are current (based on provided x and u)  - similar to what's in UpdateStates
+
+      t2 = real(t, ReKi)
+
+      ! go through fairleads and apply motions from driver
+      DO I = 1, p%NFairs
+         DO J = 1,3
+            other%ConnectList(other%FairIdList(I))%r(J)  = u%PtFairleadDisplacement%Position(J,I) + u%PtFairleadDisplacement%TranslationDisp(J,I)
+            other%ConnectList(other%FairIdList(I))%rd(J) = u%PtFairleadDisplacement%TranslationVel(J,I)  ! is this right? <<<
+         END DO
+      END DO
+
+      ! call CalcContStateDeriv in order to run model and calculate dynamics with provided x and u
+      CALL MD_CalcContStateDeriv( t2, u, p, x, xd, z, other, dxdt, ErrStat, ErrMsg )
+
+
+      ! assign net force on fairlead Connects to the output mesh
       DO i = 1, p%NFairs
          DO J=1,3
             y%PtFairleadLoad%Force(J,I) = other%ConnectList(other%FairIdList(I))%Ftot(J)
@@ -581,11 +603,41 @@ CONTAINS
 
 
       ! calculate outputs (y%WriteOutput) for glue code and write any other outputs to MoorDyn output files
-      CALL MDIO_WriteOutputs(REAL(t,DbKi) , p, other, y, ErrStat, ErrMsg)
-      IF ( ErrStat >= AbortErrLev ) THEN
-         ErrMsg = ' Error in MDIO_WriteOutputs: '//TRIM(ErrMsg)
-         RETURN
-      END IF
+      CALL MDIO_WriteOutputs(REAL(t,DbKi) , p, other, y, ErrStat2, ErrMsg2)
+      CALL CheckError(ErrStat2, 'In MDIO_WriteOutputs: '//trim(ErrMsg2))
+      IF ( ErrStat >= AbortErrLev ) RETURN
+
+
+      ! destroy dxdt
+      CALL MD_DestroyContState( dxdt, ErrStat2, ErrMsg2)
+      CALL CheckError(ErrStat2, 'When destroying dxdt: '//trim(ErrMsg2))
+      IF ( ErrStat >= AbortErrLev ) RETURN
+
+
+
+   CONTAINS
+
+      SUBROUTINE CheckError(ErrId, Msg)
+        ! This subroutine sets the error message and level and cleans up if the error is >= AbortErrLev
+
+         INTEGER(IntKi), INTENT(IN) :: ErrID       ! The error identifier (ErrStat)
+         CHARACTER(*),   INTENT(IN) :: Msg         ! The error message (ErrMsg)
+
+
+         IF ( ErrID /= ErrID_None ) THEN
+
+            IF (ErrStat /= ErrID_None) ErrMsg = TRIM(ErrMsg)//NewLine  ! keep existing error message if there is one
+            ErrMsg = TRIM(ErrMsg)//' MD_CalcOutput:'//TRIM(Msg)      ! add current error message
+            ErrStat = MAX(ErrStat, ErrID)
+
+            CALL WrScr( ErrMsg )  ! do this always or only if warning level? <<<<<<<<<<<<<<<<<<<<<< probably should remove all instances
+
+            IF( ErrStat > ErrID_Warn ) THEN
+                CALL MD_DestroyContState( dxdt, ErrStat2, ErrMsg2)
+            END IF
+         END IF
+
+      END SUBROUTINE CheckError
 
    END SUBROUTINE MD_CalcOutput
    !=============================================================================================
@@ -860,7 +912,13 @@ CONTAINS
 
             ! bottom contact (stiffness and damping)
             IF (Line%r(3,I) < -p%WtrDpth) THEN
-               Line%B(3,I) = ( (-p%WtrDpth - Line%r(3,I))*p%kBot - Line%rd(3,I)*p%cBot) * 0.5*d*(Line%l(I) + Line%l(I+1) ) ! vertical only for now
+               IF (I>0) THEN
+                  Line%B(3,I) = ( (-p%WtrDpth - Line%r(3,I))*p%kBot - Line%rd(3,I)*p%cBot) * 0.5*d*(Line%l(I) + Line%l(I+1) ) ! vertical only for now
+               ELSE
+                  ErrStat = ErrID_Fatal
+                  ErrMsg = ' Anchor node is lower than the seafloor (z < -WtrDpth)'
+                  ! need to add error handling to these functions...
+               END IF
             ELSE
                Line%B(3,I) = 0.0_ReKi
             END IF
@@ -1943,12 +2001,12 @@ CONTAINS
 
 
 
-  ! ============ below are some math convenience functions ===============
-  ! should add error checking if I keep these, but hopefully there are existing NWTCLib functions to replace them
+   ! ============ below are some math convenience functions ===============
+   ! should add error checking if I keep these, but hopefully there are existing NWTCLib functions to replace them
 
 
-  ! return unit vector (u) in direction from r1 to r2
-      !=======================================================================
+   ! return unit vector (u) in direction from r1 to r2
+   !=======================================================================
    SUBROUTINE UnitVector( u, r1, r2 )
       REAL(ReKi), INTENT(OUT)   :: u(:)
       REAL(ReKi), INTENT(IN)    :: r1(:)
@@ -1967,21 +2025,20 @@ CONTAINS
    !=======================================================================
 
 
-
-   !computes the inverse of a matrix m
+   !compute the inverse of a 3-by-3 matrix m
    !=======================================================================
    SUBROUTINE Inverse3by3( Minv, M )
       Real(ReKi), INTENT(OUT)   :: Minv(:,:)  ! returned inverse matrix
-      Real(ReKi), INTENT(IN)    :: M(:,:)  ! inputted matrix
+      Real(ReKi), INTENT(IN)    :: M(:,:)     ! inputted matrix
 
-      Real(ReKi)                :: det  ! the determinant
-      Real(ReKi)                :: invdet  ! inverse of the determinant
+      Real(ReKi)                :: det        ! the determinant
+      Real(ReKi)                :: invdet     ! inverse of the determinant
 
       det = M(1, 1) * (M(2, 2) * M(3, 3) - M(3, 2) * M(2, 3)) - &
-               M(1, 2) * (M(2, 1) * M(3, 3) - M(2, 3) * M(3, 1)) + &
-               M(1, 3) * (M(2, 1) * M(3, 2) - M(2, 2) * M(3, 1));
+            M(1, 2) * (M(2, 1) * M(3, 3) - M(2, 3) * M(3, 1)) + &
+            M(1, 3) * (M(2, 1) * M(3, 2) - M(2, 2) * M(3, 1));
 
-      invdet = 1 / det   ! because multiplying is faster than dividing
+      invdet = 1.0 / det   ! because multiplying is faster than dividing
 
       Minv(1, 1) = (M(2, 2) * M(3, 3) - M(3, 2) * M(2, 3)) * invdet
       Minv(1, 2) = (M(1, 3) * M(3, 2) - M(1, 2) * M(3, 3)) * invdet
