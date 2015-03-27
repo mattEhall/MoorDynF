@@ -1,8 +1,22 @@
-!..................................................................................................................................
-
+!**********************************************************************************************************************************
+! LICENSING
+! Copyright (C) 2015  Matthew Hall
+!
 !    This file is part of MoorDyn.
 !
-
+! Licensed under the Apache License, Version 2.0 (the "License");
+! you may not use this file except in compliance with the License.
+! You may obtain a copy of the License at
+!
+!     http://www.apache.org/licenses/LICENSE-2.0
+!
+! Unless required by applicable law or agreed to in writing, software
+! distributed under the License is distributed on an "AS IS" BASIS,
+! WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+! See the License for the specific language governing permissions and
+! limitations under the License.
+!
+!**********************************************************************************************************************************
 MODULE MoorDyn_IO
 
   ! This MODULE stores variables used for input and output and provides i/o subs
@@ -190,7 +204,7 @@ CONTAINS
          CALL OpenEcho ( UnEc, EchoFile, ErrStat, ErrMsg )
          IF ( ErrStat /= ErrID_None ) THEN
    !           ErrMsg  = ' Failed to open Echo file.'
-            print *, 'got an error in opening it'
+            !print *, 'got an error in opening it'
             CALL SetErrStat(ErrID_Fatal, ' Failed to open Echo file', ErrStat,ErrMsg,'MDIO_ReadInput')
             CALL CleanUp()
             RETURN
@@ -533,7 +547,7 @@ CONTAINS
          read (OptValue,*) InitInp%threshIC
        else
          ErrStat = ErrID_Warn
-   print *, 'unable to interpret input ', OptString
+         CALL WrScr('unable to interpret input '//trim(OptString))
        end if
 
        IF ( ErrStat > ErrID_Warn ) THEN
@@ -610,7 +624,7 @@ CONTAINS
     ! Passed variables
     CHARACTER(ChanLen),        INTENT(IN)     :: OutList(:)                  ! The list of user-requested outputs
     TYPE(MD_ParameterType),    INTENT(INOUT)  :: p                           ! The module parameters
-    TYPE(MD_OtherStateType),   INTENT(IN)     :: other
+    TYPE(MD_OtherStateType),   INTENT(INOUT)  :: other
     TYPE(MD_OutputType),       INTENT(INOUT)  :: y                           ! Initial system outputs (outputs are not calculated; only the output mesh is initialized)
     TYPE(MD_InitOutputType),   INTENT(INOUT)  :: InitOut                     ! Output for initialization routine
     INTEGER(IntKi),            INTENT(OUT)    :: ErrStat                     ! The error status code
@@ -775,19 +789,19 @@ CONTAINS
       ! also check whether each object index and node index (if applicable) is in range
       IF (p%OutParam(I)%OType==2) THEN
         IF (p%OutParam(I)%ObjID > p%NConnects) THEN
-          print *, 'warning, output Connect index excedes number of Connects'
+          call wrscr('warning, output Connect index excedes number of Connects')
           CALL DenoteInvalidOutput(p%OutParam(I)) ! flag as invalid
         END IF
       ELSE IF (p%OutParam(I)%OType==1) THEN
         IF (p%OutParam(I)%ObjID > p%NLines) THEN
-          print *, 'warning, output Line index excedes number of Line'
+          call wrscr('warning, output Line index excedes number of Line')
           CALL DenoteInvalidOutput(p%OutParam(I)) ! flag as invalid
         END IF
         IF (p%OutParam(I)%NodeID > other%LineList(p%OutParam(I)%ObjID)%N) THEN
-          print *, 'warning, output node index excedes number of nodes'
+          call wrscr('warning, output node index excedes number of nodes')
           CALL DenoteInvalidOutput(p%OutParam(I)) ! flag as invalid
         ELSE IF (p%OutParam(I)%NodeID < 0) THEN
-          print *, 'warning, output node index is less than zero'
+          call wrscr('warning, output node index is less than zero')
           CALL DenoteInvalidOutput(p%OutParam(I)) ! flag as invalid
         END IF
 
@@ -920,7 +934,7 @@ CONTAINS
 
       ELSE  ! if no outputs requested
 
-         print *, 'note, MDIO_OpenOutput thinks that no outputs have been requested.'
+         call wrscr('note, MDIO_OpenOutput thinks that no outputs have been requested.')
 
       END IF
 
