@@ -27,7 +27,7 @@ MODULE MoorDyn
 
    PRIVATE
 
-   TYPE(ProgDesc), PARAMETER            :: MD_ProgDesc = ProgDesc( 'MoorDyn', 'v0.9.01-mth', '19-Feb-2015' )
+   TYPE(ProgDesc), PARAMETER            :: MD_ProgDesc = ProgDesc( 'MoorDyn', 'v0.9.01-mth', '30-Mar-2015' )
 
 
    PUBLIC :: MD_Init
