@@ -68,7 +68,7 @@ CONTAINS
       REAL(ReKi), ALLOCATABLE                      :: FairTensIC(:,:)! array of size Nfairs, 3 to store three latest fairlead tensions of each line
       CHARACTER(20)                                :: TempString     ! temporary string for incidental use
       INTEGER(IntKi)                               :: ErrStat2       ! Error status of the operation
-      CHARACTER(LEN(ErrMsg))                       :: ErrMsg2        ! Error message if ErrStat2 /= ErrID_None
+      CHARACTER(ErrMsgLen)                         :: ErrMsg2        ! Error message if ErrStat2 /= ErrID_None
 
 
 
@@ -496,10 +496,10 @@ CONTAINS
 
       INTEGER(IntKi)                                  :: I          ! counter
       INTEGER(IntKi)                                  :: J          ! counter
-      INTEGER(IntKi)                                  :: K          ! counter
+!      INTEGER(IntKi)                                  :: K          ! counter
 
       INTEGER(IntKi)                                  :: ErrStat2   ! Error status of the operation
-      CHARACTER(LEN(ErrMsg))                          :: ErrMsg2    ! Error message if ErrStat2 /= ErrID_None
+      CHARACTER(ErrMsgLen)                            :: ErrMsg2    ! Error message if ErrStat2 /= ErrID_None
 
       TYPE(MD_InputType)                              :: u_interp   !
       INTEGER(IntKi)                                  :: nTime
@@ -592,7 +592,7 @@ CONTAINS
       REAL(ReKi)                                     :: t2      ! real version of t (double)
 
       INTEGER(IntKi)                                 :: ErrStat2   ! Error status of the operation
-      CHARACTER(LEN(ErrMsg))                         :: ErrMsg2    ! Error message if ErrStat2 /= ErrID_None
+      CHARACTER(ErrMsgLen)                           :: ErrMsg2    ! Error message if ErrStat2 /= ErrID_None
 
 
       ! below updated to make sure outputs are current (based on provided x and u)  - similar to what's in UpdateStates
@@ -1086,10 +1086,10 @@ CONTAINS
       INTEGER(IntKi),                 INTENT(  OUT) :: ErrStat
       CHARACTER(*),                   INTENT(  OUT) :: ErrMsg
 
-      INTEGER(IntKi)                                :: i=0
+!      INTEGER(IntKi)                                :: i=0
 
       INTEGER(IntKi)                               :: ErrStat2      ! Error status of the operation
-      CHARACTER(LEN(ErrMsg))                       :: ErrMsg2       ! Error message if ErrStat2 /= ErrID_None
+      CHARACTER(ErrMsgLen)                         :: ErrMsg2       ! Error message if ErrStat2 /= ErrID_None
 
       ErrStat = ErrID_None
       ErrMsg  = ""
@@ -1256,7 +1256,7 @@ CONTAINS
       INTEGER,       INTENT(   INOUT )   :: ErrStat       ! returns a non-zero value when an error occurs
       CHARACTER(*),  INTENT(   INOUT )   :: ErrMsg        ! Error message if ErrStat /= ErrID_None
 
-      INTEGER(4)                         :: I             ! Generic index
+!      INTEGER(4)                         :: I             ! Generic index
       INTEGER(4)                         :: J             ! Generic index
       INTEGER(4)                         :: K             ! Generic index
       INTEGER(IntKi)                     :: N
@@ -1356,7 +1356,7 @@ CONTAINS
 
 
       INTEGER(IntKi)                         :: ErrStat2      ! Error status of the operation
-      CHARACTER(LEN(ErrMsg))                 :: ErrMsg2       ! Error message if ErrStat2 /= ErrID_None
+      CHARACTER(ErrMsgLen)                   :: ErrMsg2       ! Error message if ErrStat2 /= ErrID_None
       REAL(ReKi)                             :: WetWeight
       REAL(ReKi)                             :: SeabedCD = 0.0_ReKi
       REAL(ReKi)                             :: TenTol = 0.0001_ReKi
