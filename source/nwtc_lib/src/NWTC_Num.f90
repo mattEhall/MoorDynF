@@ -1,6 +1,6 @@
 !**********************************************************************************************************************************
 ! LICENSING
-! Copyright (C) 2013-2014  National Renewable Energy Laboratory
+! Copyright (C) 2013-2015  National Renewable Energy Laboratory
 !
 !    This file is part of the NWTC Subroutine Library.
 !
@@ -17,8 +17,8 @@
 ! limitations under the License.
 !
 !**********************************************************************************************************************************
-! File last committed: $Date: 2015-01-10 21:35:49 -0700 (Sat, 10 Jan 2015) $
-! (File) Revision #: $Rev: 283 $
+! File last committed: $Date: 2015-04-14 14:00:21 -0600 (Tue, 14 Apr 2015) $
+! (File) Revision #: $Rev: 297 $
 ! URL: $HeadURL: https://windsvn.nrel.gov/NWTC_Library/trunk/source/NWTC_Num.f90 $
 !**********************************************************************************************************************************
 MODULE NWTC_Num
@@ -38,6 +38,9 @@ MODULE NWTC_Num
    !  FUNCTION   CubicSplineInterpM    ( X, XAry, YAry, Coef, ErrStat, ErrMsg )                       ! Interpolate using cubic splines for multiple tables of irregularly space data.
    !  FUNCTION   EqualRealNos          ( ReNum1, ReNum2 )
    !  SUBROUTINE Eye                   ( A, ErrStat, ErrMsg )                                         ! sets A equal to the identity matrix (A can have 2 or 3 dimensions)
+   !  FUNCTION   DCM_exp               ( lambda )                         
+   !  SUBROUTINE DCM_logMap            ( DCM, logMap, ErrStat, ErrMsg )
+   !  SUBROUTINE DCM_SetLogMapForInterp( tensor )
    !  SUBROUTINE GaussElim             ( AugMat, NumEq, x, ErrStat, ErrMsg )                          ! Performs Gauss-Jordan elimination to solve Ax=b for x; AugMat = [A b]
    !  SUBROUTINE GetOffsetReg          ( Ary, NumPts, Val, Ind, Fract, ErrStat, ErrMsg )              ! Determine index of the point in Ary just below Val and the fractional distance to the next point in the array.
    !  FUNCTION   GetSmllRotAngs        ( DCMat, ErrStat, ErrMsg )
@@ -49,21 +52,35 @@ MODULE NWTC_Num
    !  FUNCTION   InterpStp             ( XVal, XAry, YAry, ILo, AryLen )                              ! Generic interface for InterpStpComp and InterpStpReal.
    !     FUNCTION   InterpStpComp      ( XVal, XAry, YAry, Ind, AryLen )
    !     FUNCTION   InterpStpReal      ( XVal, XAry, YAry, Ind, AryLen )
+   !  SUBROUTINE InterpStpReal2D       ( InCoord, Dataset, x, y, z, LastIndex, InterpData )
+   !  SUBROUTINE InterpStpReal3D       ( InCoord, Dataset, x, y,    LastIndex, InterpData )   
+   !  FUNCTION   InterpWrappedStpReal  ( XValIn, XAry, YAry, Ind, AryLen )
+   !  SUBROUTINE IsoparametricCoords   ( InCoord, posLo, posHi, isopc )
    !  FUNCTION   IsSymmetric           ( A )                                                          ! Function to determine if A(:,:) is symmetric
    !  SUBROUTINE LocateBin             ( XVal, XAry, Ind, AryLen )
    !  SUBROUTINE LocateStp             ( XVal, XAry, Ind, AryLen )
    !  FUNCTION   Mean                  ( Ary, AryLen )                                                ! Function to calculate the mean value of a vector array.
    !  SUBROUTINE MPi2Pi                ( Angle )
    !  FUNCTION   PSF                   ( N, NumPrimes )                                               ! This routine factors the number N into its primes.  
+   !  FUNCTION   Quaternion_Conjugate( q )
+   !  FUNCTION   Quaternion_Norm( q )
+   !  FUNCTION   Quaternion_Power( q, alpha )
+   !  FUNCTION   Quaternion_Product( p, q )
+   !  FUNCTION   Quaternion_to_DCM( q )
+   !  FUNCTION   DCM_to_Quaternion( DCM )
+   !  FUNCTION   Quaternion_Interp( q1, q2, s )
    !  SUBROUTINE RegCubicSplineInit    ( AryLen, XAry, YAry, DelX, Coef )                             ! Calculate coefficients for regularly spaced array to use cubic splines.
    !  SUBROUTINE RegCubicSplineInitM   ( XAry, YAry, DelX, Coef, ErrStat, ErrMsg )                    ! Interpolate using cubic splines for multiple tables of regularly space data.
    !  FUNCTION   RegCubicSplineInterp  ( X, AryLen, XAry, YAry, DelX, Coef )                          ! Interpolate a regularly spaced array using cubic splines.
    !  FUNCTION   RegCubicSplineInterpM ( X, XAry, YAry, DelX, Coef, ErrStat, ErrMsg )                 ! Initialize cubic splines for multiple tables of regularly space data.
    !  SUBROUTINE RombergInt            ( f, a, b, R, err, eps, ErrStat )
+   !  SUBROUTINE SetAnglesForInterp    ( angles )                                                     ! uses 2pi periodicity of angles to set angles for interpolation (makes sure no two adjacent entries are more than pi apart)
    !  SUBROUTINE SetConstants
    !  SUBROUTINE SmllRotTrans          ( RotationType, Theta1, Theta2, Theta3, TransMat, ErrTxt )
    !  SUBROUTINE SortUnion             ( Ary1, N1, Ary2, N2, Ary, N )
    !  FUNCTION   StdDevFn              ( Ary, AryLen, Mean )                                          ! Function to calculate the standard deviation of a vector array.
+   !  FUNCTION   trace                 ( A )                                                          ! computes the trace (sum of diagonal elements) of a matrix  (2-dimension array)
+   !  FUNCTION   TwoNorm               ( v )                                                          ! computes the l2 norm of a vector (1-dimension array) 
    !  SUBROUTINE Zero2TwoPi            ( Angle )
    
    USE                                          NWTC_IO
@@ -935,7 +952,7 @@ SUBROUTINE DCM_SetLogMapForInterp( tensor )
    REAL(ReKi)                    :: temp(3), temp1(3) ! difference between two tensors
    REAL(ReKi)                    :: period(3)         ! the period to add to the rotational parameters
    INTEGER(IntKi)                :: nc                ! size of the tensors matrix
-   INTEGER(IntKi)                :: ic, k             ! loop counters for each array dimension
+   INTEGER(IntKi)                :: ic                ! loop counters for each array dimension
    
    nc = size(tensor,2)
           
@@ -1938,6 +1955,207 @@ END SUBROUTINE DCM_SetLogMapForInterp
 
    RETURN
    END FUNCTION InterpStpReal ! ( XVal, XAry, YAry, Ind, AryLen )
+
+!=======================================================================
+!< This routine linearly interpolates Dataset. It is
+!! set for a 2-d interpolation on x and y of the input point.
+!! x and y must be in increasing order. Each dimension may contain only 1 value.
+!! The method is described in this paper: 
+!!   http://www.colorado.edu/engineering/CAS/courses.d/AFEM.d/AFEM.Ch11.d/AFEM.Ch11.pdf
+SUBROUTINE InterpStpReal2D( InCoord, Dataset, x, y, LastIndex, InterpData )
+
+   INTEGER, PARAMETER :: NumDimensions = 2
+
+      ! I/O variables
+
+   REAL(ReKi),                     INTENT(IN   ) :: InCoord(NumDimensions)                       !< Arranged as (x, y)
+   REAL(ReKi),                     INTENT(IN   ) :: Dataset(:,:)                                 !< Arranged as (x, y)
+   REAL(ReKi),                     INTENT(IN   ) :: x(:)                                         !< first dimension in increasing order
+   REAL(ReKi),                     INTENT(IN   ) :: y(:)                                         !< second dimension in increasing order
+   INTEGER(IntKi),                 INTENT(INOUT) :: LastIndex(NumDimensions)                     !< Index for the last (x, y) used
+   REAL(ReKi),                     INTENT(  OUT) :: InterpData                                   !< The interpolated value of Dataset(:,:) at InCoord
+
+
+      ! Local variables
+
+   INTEGER(IntKi)                                :: Indx_Lo(NumDimensions)                       ! index associated with lower bound of dimension 1,2 where val(Indx_lo(i)) <= InCoord(i) <= val(Indx_hi(i))
+   INTEGER(IntKi)                                :: Indx_Hi(NumDimensions)                       ! index associated with upper bound of dimension 1,2 where val(Indx_lo(i)) <= InCoord(i) <= val(Indx_hi(i))
+   REAL(ReKi)                                    :: Pos_Lo(NumDimensions)                        ! coordinate value with lower bound of dimension 1,2
+   REAL(ReKi)                                    :: Pos_Hi(NumDimensions)                        ! coordinate value with upper bound of dimension 1,2
+
+   REAL(ReKi)                                    :: isopc(NumDimensions)                         ! isoparametric coordinates
+
+   REAL(ReKi)                                    :: N(2**NumDimensions)                          ! size 2^n
+   REAL(ReKi)                                    :: u(2**NumDimensions)                          ! size 2^n
+
+   INTEGER(IntKi)                                :: nx, ny
+
+
+      ! find the indices into the arrays representing coordinates of each dimension:
+      !  (by using LocateStp, we do not require equally spaced arrays)
+
+   nx = SIZE(x)
+   ny = SIZE(y)
+
+   CALL LocateStp( InCoord(1), x, LastIndex(1), nx )
+   CALL LocateStp( InCoord(2), y, LastIndex(2), ny )
+
+   Indx_Lo = LastIndex  ! at this point, 0 <= Indx_Lo(i) <= n(i) for all i
+
+
+   ! x (indx 1)
+   IF (Indx_Lo(1) == 0) THEN
+      Indx_Lo(1) = 1
+   ELSEIF (Indx_Lo(1) == nx ) THEN
+      Indx_Lo(1) = max( nx - 1, 1 )                ! make sure it's a valid index
+   END IF
+   Indx_Hi(1) = min( Indx_Lo(1) + 1 , nx )         ! make sure it's a valid index
+
+   ! y (indx 2)
+   IF (Indx_Lo(2) == 0) THEN
+      Indx_Lo(2) = 1
+   ELSEIF (Indx_Lo(2) == ny ) THEN
+      Indx_Lo(2) = max( ny - 1, 1 )                ! make sure it's a valid index
+   END IF
+   Indx_Hi(2) = min( Indx_Lo(2) + 1 , ny )         ! make sure it's a valid index
+
+
+      ! calculate the bounding box; the positions of all dimensions:
+
+   pos_Lo(1) = x( Indx_Lo(1) )
+   pos_Hi(1) = x( Indx_Hi(1) )
+
+   pos_Lo(2) = y( Indx_Lo(2) )
+   pos_Hi(2) = y( Indx_Hi(2) )
+
+
+      ! 2-D linear interpolation:
+
+   CALL IsoparametricCoords( InCoord, pos_Lo, pos_Hi, isopc )      ! Calculate iospc
+
+   N(1)  = ( 1.0_ReKi + isopc(1) )*( 1.0_ReKi - isopc(2) )
+   N(2)  = ( 1.0_ReKi + isopc(1) )*( 1.0_ReKi + isopc(2) )
+   N(3)  = ( 1.0_ReKi - isopc(1) )*( 1.0_ReKi + isopc(2) )
+   N(4)  = ( 1.0_ReKi - isopc(1) )*( 1.0_ReKi - isopc(2) )
+   N     = N / REAL( SIZE(N), ReKi )  ! normalize
+
+
+   u(1)  = Dataset( Indx_Hi(1), Indx_Lo(2) )
+   u(2)  = Dataset( Indx_Hi(1), Indx_Hi(2) )
+   u(3)  = Dataset( Indx_Lo(1), Indx_Hi(2) )
+   u(4)  = Dataset( Indx_Lo(1), Indx_Lo(2) )
+
+   InterpData = SUM ( N * u )
+
+
+END SUBROUTINE InterpStpReal2D   
+!=======================================================================
+!< This routine linearly interpolates Dataset. It is set for a 3-d 
+!! interpolation on x and y of the input point. x, y, and z must be 
+!! in increasing order. Each dimension may contain only 1 value.
+!! The method is described in this paper: 
+!!   http://www.colorado.edu/engineering/CAS/courses.d/AFEM.d/AFEM.Ch11.d/AFEM.Ch11.pdf
+SUBROUTINE InterpStpReal3D( InCoord, Dataset, x, y, z, LastIndex, InterpData )
+! This routine linearly interpolates Dataset. It is set for a 3-d 
+! interpolation on x and y of the input point. x, y, and z must be 
+! in increasing order. Each dimension may contain only 1 value.
+! The method is described in this paper: 
+!   http://www.colorado.edu/engineering/CAS/courses.d/AFEM.d/AFEM.Ch11.d/AFEM.Ch11.pdf
+
+   INTEGER, PARAMETER :: NumDimensions = 3
+
+      ! I/O variables
+
+   REAL(ReKi),                     INTENT(IN   ) :: InCoord(NumDimensions)                       !< Arranged as (x, y, z)
+   REAL(ReKi),                     INTENT(IN   ) :: Dataset(:,:,:)                               !< Arranged as (x, y, z)
+   REAL(ReKi),                     INTENT(IN   ) :: x(:)                                         !< first dimension in increasing order
+   REAL(ReKi),                     INTENT(IN   ) :: y(:)                                         !< second dimension in increasing order
+   REAL(ReKi),                     INTENT(IN   ) :: z(:)                                         !< third dimension in increasing order
+   INTEGER(IntKi),                 INTENT(INOUT) :: LastIndex(NumDimensions)                     !< Index for the last (x, y, z) used
+   REAL(ReKi),                     INTENT(  OUT) :: InterpData                                   !< The interpolated value of Dataset(:,:,:) at InCoord
+
+
+      ! Local variables
+
+   INTEGER(IntKi)                                :: Indx_Lo(NumDimensions)                       ! index associated with lower bound of dimension i where val(Indx_lo(i)) <= InCoord(i) <= val(Indx_hi(i))
+   INTEGER(IntKi)                                :: Indx_Hi(NumDimensions)                       ! index associated with upper bound of dimension i where val(Indx_lo(i)) <= InCoord(i) <= val(Indx_hi(i))
+   REAL(ReKi)                                    :: Pos_Lo(NumDimensions)                        ! coordinate value with lower bound of dimension i
+   REAL(ReKi)                                    :: Pos_Hi(NumDimensions)                        ! coordinate value with upper bound of dimension i
+
+   REAL(ReKi)                                    :: isopc(NumDimensions)                         ! isoparametric coordinates
+
+   REAL(ReKi)                                    :: N(2**NumDimensions)                          ! size 2^NumDimensions
+   REAL(ReKi)                                    :: u(2**NumDimensions)                          ! size 2^NumDimensions
+
+   INTEGER(IntKi)                                :: nd(NumDimensions)                            ! size of each dimension
+   INTEGER(IntKi)                                :: i
+   
+
+      ! find the indices into the arrays representing coordinates of each dimension:
+      !  (by using LocateStp, we do not require equally spaced frequencies or points)
+
+   nd(1) = SIZE(x)
+   nd(2) = SIZE(y)
+   nd(3) = SIZE(z)
+
+   CALL LocateStp( InCoord(1), x, LastIndex(1), nd(1) )
+   CALL LocateStp( InCoord(2), y, LastIndex(2), nd(2) )
+   CALL LocateStp( InCoord(3), z, LastIndex(3), nd(3) )
+
+   Indx_Lo = LastIndex  ! at this point, 0 <= Indx_Lo(i) <= n(i) for all i
+
+
+   DO i=1,NumDimensions
+      IF (Indx_Lo(i) == 0) THEN
+         Indx_Lo(i) = 1
+      ELSEIF (Indx_Lo(i) == nd(i) ) THEN
+         Indx_Lo(i) = max( nd(i) - 1, 1 )                ! make sure it's a valid index
+      END IF
+      Indx_Hi(i) = min( Indx_Lo(i) + 1 , nd(i) )         ! make sure it's a valid index
+   END DO
+   
+ 
+
+      ! calculate the bounding box; the positions of all dimensions:
+
+   pos_Lo(1) = x( Indx_Lo(1) )
+   pos_Hi(1) = x( Indx_Hi(1) )
+
+   pos_Lo(2) = y( Indx_Lo(2) )
+   pos_Hi(2) = y( Indx_Hi(2) )
+
+   pos_Lo(3) = z( Indx_Lo(3) )
+   pos_Hi(3) = z( Indx_Hi(3) )
+   
+
+      ! 2-D linear interpolation:
+
+   CALL IsoparametricCoords( InCoord, pos_Lo, pos_Hi, isopc )      ! Calculate iospc
+
+   
+   N(1)  = ( 1.0_ReKi + isopc(1) )*( 1.0_ReKi - isopc(2) )*( 1.0_ReKi - isopc(3) )
+   N(2)  = ( 1.0_ReKi + isopc(1) )*( 1.0_ReKi + isopc(2) )*( 1.0_ReKi - isopc(3) )
+   N(3)  = ( 1.0_ReKi - isopc(1) )*( 1.0_ReKi + isopc(2) )*( 1.0_ReKi - isopc(3) )
+   N(4)  = ( 1.0_ReKi - isopc(1) )*( 1.0_ReKi - isopc(2) )*( 1.0_ReKi - isopc(3) )
+   N(5)  = ( 1.0_ReKi + isopc(1) )*( 1.0_ReKi - isopc(2) )*( 1.0_ReKi + isopc(3) )
+   N(6)  = ( 1.0_ReKi + isopc(1) )*( 1.0_ReKi + isopc(2) )*( 1.0_ReKi + isopc(3) )
+   N(7)  = ( 1.0_ReKi - isopc(1) )*( 1.0_ReKi + isopc(2) )*( 1.0_ReKi + isopc(3) )
+   N(8)  = ( 1.0_ReKi - isopc(1) )*( 1.0_ReKi - isopc(2) )*( 1.0_ReKi + isopc(3) )
+   N     = N / REAL( SIZE(N), ReKi )  ! normalize
+      
+   u(1)  = Dataset( Indx_Hi(1), Indx_Lo(2), Indx_Lo(3) )
+   u(2)  = Dataset( Indx_Hi(1), Indx_Hi(2), Indx_Lo(3) )
+   u(3)  = Dataset( Indx_Lo(1), Indx_Hi(2), Indx_Lo(3) )
+   u(4)  = Dataset( Indx_Lo(1), Indx_Lo(2), Indx_Lo(3) )
+   u(5)  = Dataset( Indx_Hi(1), Indx_Lo(2), Indx_Hi(3) )
+   u(6)  = Dataset( Indx_Hi(1), Indx_Hi(2), Indx_Hi(3) )
+   u(7)  = Dataset( Indx_Lo(1), Indx_Hi(2), Indx_Hi(3) )
+   u(8)  = Dataset( Indx_Lo(1), Indx_Lo(2), Indx_Hi(3) )   
+   
+   InterpData = SUM ( N * u )     ! could use dot_product, though I'm not sure it's the came for complex numbers
+      
+
+END SUBROUTINE InterpStpReal3D   
 !=======================================================================
    FUNCTION InterpWrappedStpReal( XValIn, XAry, YAry, Ind, AryLen )
 
@@ -1986,9 +2204,14 @@ END SUBROUTINE DCM_SetLogMapForInterp
 !=======================================================================
 !> This subroutine calculates the iosparametric coordinates, isopc, which is a value between -1 and 1 
 !! (for each dimension of a dataset), indicating where InCoord falls between posLo and posHi.
-!!
+!! It is used in InterpStpReal2D and InterpStpReal3D.
    SUBROUTINE IsoparametricCoords( InCoord, posLo, posHi, isopc )
 
+! This subroutine calculates the iosparametric coordinates, isopc, which is a value between -1 and 1 
+! (for each dimension of a dataset), indicating where InCoord falls between posLo and posHi.
+! It is used in InterpStpReal2D and InterpStpReal3D.
+   
+   
       REAL(ReKi),     INTENT(IN   )          :: InCoord(:)                             !< Coordinate values we're interpolating to; (size = number of interpolation dimensions)
       REAL(ReKi),     INTENT(IN   )          :: posLo(:)                               !< coordinate values associated with Indx_Lo; (size = number of interpolation dimensions)
       REAL(ReKi),     INTENT(IN   )          :: posHi(:)                               !< coordinate values associated with Indx_Hi; (size = number of interpolation dimensions)
@@ -2240,19 +2463,6 @@ END SUBROUTINE DCM_SetLogMapForInterp
 
    RETURN
    END SUBROUTINE MPi2Pi
-!=======================================================================
-   FUNCTION TwoNorm(v)
-   
-      ! this function returns the 2-norm of a vector v
-      ! fortran 2008 has Norm2() built in
-      
-      REAL(ReKi), INTENT(IN)  :: v(:)      
-      REAL(ReKi)              :: TwoNorm      
-      
-      TwoNorm = SQRT( DOT_PRODUCT(v, v) )
-      
-      
-   END FUNCTION
 !=======================================================================
    FUNCTION PSF ( Npsf, NumPrimes, subtract )
 
@@ -3447,6 +3657,19 @@ END SUBROUTINE DCM_SetLogMapForInterp
    end do
    
    END FUNCTION trace
+!=======================================================================
+   FUNCTION TwoNorm(v)
+   
+      ! this function returns the 2-norm of a vector v
+      ! fortran 2008 has Norm2() built in
+      
+      REAL(ReKi), INTENT(IN)  :: v(:)      
+      REAL(ReKi)              :: TwoNorm      
+      
+      TwoNorm = SQRT( DOT_PRODUCT(v, v) )
+      
+      
+   END FUNCTION
 !=======================================================================  
    SUBROUTINE Zero2TwoPi ( Angle )
 
