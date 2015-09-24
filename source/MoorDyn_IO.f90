@@ -366,7 +366,7 @@ CONTAINS
     ! read each line
     DO I = 1,p%NConnects
           ! read the table entries   Node      Type      X        Y         Z        M        V        FX       FY      FZ  Cda Ca
-       READ(UnIn,'(A)',IOSTAT=ErrStat) Line      !read into a line
+       READ(UnIn,'(A)',IOSTAT=ErrStat2) Line      !read into a line
 
        IF (ErrStat2 == 0) THEN
           READ(Line,*,IOSTAT=ErrStat2) other%ConnectList(I)%IdNum, other%ConnectList(I)%type, other%ConnectList(I)%conX, &
@@ -378,7 +378,7 @@ CONTAINS
        IF ( ErrStat2 /= 0 ) THEN
           CALL WrScr('   Unable to parse Connection '//trim(Num2LStr(I))//' row in input file.')  ! Specific screen output because errors likely
           CALL WrScr('   Ensure row has all 12 columns, including CdA and Ca.')           ! to be caused by non-updated input file formats.
-			 CALL SetErrStat( ErrID_Fatal, 'Failed to read connects.' , ErrStat, ErrMsg, RoutineName ) ! would be nice to specify which line
+             CALL SetErrStat( ErrID_Fatal, 'Failed to read connects.' , ErrStat, ErrMsg, RoutineName ) ! would be nice to specify which line
           CALL CleanUp()
           RETURN
        END IF
@@ -451,8 +451,8 @@ CONTAINS
        READ(UnIn,'(A)',IOSTAT=ErrStat2) Line      !read into a line
 
 
-       IF (ErrStat == 0) THEN
-          READ(Line,*,IOSTAT=ErrStat) other%LineList(I)%IdNum, other%LineList(I)%type, other%LineList(I)%UnstrLen, &
+       IF (ErrStat2 == 0) THEN
+          READ(Line,*,IOSTAT=ErrStat2) other%LineList(I)%IdNum, other%LineList(I)%type, other%LineList(I)%UnstrLen, &
             other%LineList(I)%N, other%LineList(I)%AnchConnect, other%LineList(I)%FairConnect, LineOutString
        END IF
 
@@ -876,8 +876,8 @@ CONTAINS
       !  ALLOCATE ( InitOut%WriteOutputUnt(p%NumOuts+p%OutAllint*p%OutAllDims), STAT = ErrStat )
 
       DO I = 1,p%NumOuts
-      InitOut%WriteOutputHdr(I) = p%OutParam(I)%Name
-      InitOut%WriteOutputUnt(I) = p%OutParam(I)%Units
+         InitOut%WriteOutputHdr(I) = p%OutParam(I)%Name
+         InitOut%WriteOutputUnt(I) = p%OutParam(I)%Units
       END DO
 
 
@@ -968,100 +968,100 @@ CONTAINS
          
          IF (other%LineList(I)%OutFlagList(1) == 1) THEN   ! only proceed if the line is flagged to output a file
            
-				! Open the file for output
-				OutFileName = TRIM(p%RootName)//'.Line'//TRIM(Int2LStr(I))//'.out'
-				CALL GetNewUnit( other%LineList(I)%LineUnOut )
+            ! Open the file for output
+            OutFileName = TRIM(p%RootName)//'.Line'//TRIM(Int2LStr(I))//'.out'
+            CALL GetNewUnit( other%LineList(I)%LineUnOut )
 
-				CALL OpenFOutFile ( other%LineList(I)%LineUnOut, OutFileName, ErrStat, ErrMsg )
-				IF ( ErrStat > ErrID_None ) THEN
-					ErrMsg = ' Error opening Line output file '//TRIM(ErrMsg)
-					ErrStat = ErrID_Fatal
-					RETURN
-				END IF
+            CALL OpenFOutFile ( other%LineList(I)%LineUnOut, OutFileName, ErrStat, ErrMsg )
+            IF ( ErrStat > ErrID_None ) THEN
+               ErrMsg = ' Error opening Line output file '//TRIM(ErrMsg)
+               ErrStat = ErrID_Fatal
+               RETURN
+            END IF
 
-								
-				! calculate number of output entries (including time) to write for this line
-				LineNumOuts = 1 + 3*(other%LineList(I)%N + 1)*SUM(other%LineList(I)%OutFlagList(2:5)) + other%LineList(I)%N*SUM(other%LineList(I)%OutFlagList(6:9))
+                        
+            ! calculate number of output entries (including time) to write for this line
+            LineNumOuts = 1 + 3*(other%LineList(I)%N + 1)*SUM(other%LineList(I)%OutFlagList(2:5)) + other%LineList(I)%N*SUM(other%LineList(I)%OutFlagList(6:9))
 
-				Frmt = '(A10,'//TRIM(Int2LStr(LineNumOuts))//'(A1,A10))'   ! should evenutally use user specified format?
-				!Frmt = '(A10,'//TRIM(Int2LStr(3+3*other%LineList(I)%N))//'(A1,A10))'
-				
-				! Write the names of the output parameters:  (these use "implied DO" loops)
+            Frmt = '(A10,'//TRIM(Int2LStr(LineNumOuts))//'(A1,A10))'   ! should evenutally use user specified format?
+            !Frmt = '(A10,'//TRIM(Int2LStr(3+3*other%LineList(I)%N))//'(A1,A10))'
+            
+            ! Write the names of the output parameters:  (these use "implied DO" loops)
 
-				WRITE(other%LineList(I)%LineUnOut,'(A10)', advance='no', IOSTAT=ErrStat2)  TRIM( 'Time' )
-				IF (other%LineList(I)%OutFlagList(2) == 1) THEN
-					WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((3+3*other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
-						( p%Delim, 'Node'//TRIM(Int2Lstr(J))//'px', p%Delim, 'Node'//TRIM(Int2Lstr(J))//'py', p%Delim, 'Node'//TRIM(Int2Lstr(J))//'pz', J=0,(other%LineList(I)%N) )
-				END IF
-				IF (other%LineList(I)%OutFlagList(3) == 1) THEN
-					WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((3+3*other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
-						( p%Delim, 'Node'//TRIM(Int2Lstr(J))//'vx', p%Delim, 'Node'//TRIM(Int2Lstr(J))//'vy', p%Delim, 'Node'//TRIM(Int2Lstr(J))//'vz', J=0,(other%LineList(I)%N) )
-				END IF
-				IF (other%LineList(I)%OutFlagList(4) == 1) THEN
-					WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((3+3*other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
-						( p%Delim, 'Node'//TRIM(Int2Lstr(J))//'Ux', p%Delim, 'Node'//TRIM(Int2Lstr(J))//'Uy', p%Delim, 'Node'//TRIM(Int2Lstr(J))//'Uz', J=0,(other%LineList(I)%N) )
-				END IF
-				IF (other%LineList(I)%OutFlagList(5) == 1) THEN
-					WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((3+3*other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
-						( p%Delim, 'Node'//TRIM(Int2Lstr(J))//'Dx', p%Delim, 'Node'//TRIM(Int2Lstr(J))//'Dy', p%Delim, 'Node'//TRIM(Int2Lstr(J))//'Dz', J=0,(other%LineList(I)%N) )
-				END IF
-				IF (other%LineList(I)%OutFlagList(6) == 1) THEN
-					WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
-						( p%Delim, 'Seg'//TRIM(Int2Lstr(J))//'Ten', J=1,(other%LineList(I)%N) )
-				END IF
-				IF (other%LineList(I)%OutFlagList(7) == 1) THEN
-					WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
-						( p%Delim, 'Seg'//TRIM(Int2Lstr(J))//'Dmp', J=1,(other%LineList(I)%N) )
-				END IF
-				IF (other%LineList(I)%OutFlagList(8) == 1) THEN
-					WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
-						( p%Delim, 'Seg'//TRIM(Int2Lstr(J))//'Str', J=1,(other%LineList(I)%N) )
-				END IF
-				IF (other%LineList(I)%OutFlagList(9) == 1) THEN
-					WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
-						( p%Delim, 'Seg'//TRIM(Int2Lstr(J))//'SRt', J=1,(other%LineList(I)%N) )
-				END IF
-				
-				WRITE(other%LineList(I)%LineUnOut,'(A1)', IOSTAT=ErrStat2) ' '  ! make line break at the end
-				
-				! Now write the units line
+            WRITE(other%LineList(I)%LineUnOut,'(A10)', advance='no', IOSTAT=ErrStat2)  TRIM( 'Time' )
+            IF (other%LineList(I)%OutFlagList(2) == 1) THEN
+               WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((3+3*other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
+                  ( p%Delim, 'Node'//TRIM(Int2Lstr(J))//'px', p%Delim, 'Node'//TRIM(Int2Lstr(J))//'py', p%Delim, 'Node'//TRIM(Int2Lstr(J))//'pz', J=0,(other%LineList(I)%N) )
+            END IF
+            IF (other%LineList(I)%OutFlagList(3) == 1) THEN
+               WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((3+3*other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
+                  ( p%Delim, 'Node'//TRIM(Int2Lstr(J))//'vx', p%Delim, 'Node'//TRIM(Int2Lstr(J))//'vy', p%Delim, 'Node'//TRIM(Int2Lstr(J))//'vz', J=0,(other%LineList(I)%N) )
+            END IF
+            IF (other%LineList(I)%OutFlagList(4) == 1) THEN
+               WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((3+3*other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
+                  ( p%Delim, 'Node'//TRIM(Int2Lstr(J))//'Ux', p%Delim, 'Node'//TRIM(Int2Lstr(J))//'Uy', p%Delim, 'Node'//TRIM(Int2Lstr(J))//'Uz', J=0,(other%LineList(I)%N) )
+            END IF
+            IF (other%LineList(I)%OutFlagList(5) == 1) THEN
+               WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((3+3*other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
+                  ( p%Delim, 'Node'//TRIM(Int2Lstr(J))//'Dx', p%Delim, 'Node'//TRIM(Int2Lstr(J))//'Dy', p%Delim, 'Node'//TRIM(Int2Lstr(J))//'Dz', J=0,(other%LineList(I)%N) )
+            END IF
+            IF (other%LineList(I)%OutFlagList(6) == 1) THEN
+               WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
+                  ( p%Delim, 'Seg'//TRIM(Int2Lstr(J))//'Ten', J=1,(other%LineList(I)%N) )
+            END IF
+            IF (other%LineList(I)%OutFlagList(7) == 1) THEN
+               WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
+                  ( p%Delim, 'Seg'//TRIM(Int2Lstr(J))//'Dmp', J=1,(other%LineList(I)%N) )
+            END IF
+            IF (other%LineList(I)%OutFlagList(8) == 1) THEN
+               WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
+                  ( p%Delim, 'Seg'//TRIM(Int2Lstr(J))//'Str', J=1,(other%LineList(I)%N) )
+            END IF
+            IF (other%LineList(I)%OutFlagList(9) == 1) THEN
+               WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
+                  ( p%Delim, 'Seg'//TRIM(Int2Lstr(J))//'SRt', J=1,(other%LineList(I)%N) )
+            END IF
+            
+            WRITE(other%LineList(I)%LineUnOut,'(A1)', IOSTAT=ErrStat2) ' '  ! make line break at the end
+            
+            ! Now write the units line
 
-				WRITE(other%LineList(I)%LineUnOut,'(A10)', advance='no', IOSTAT=ErrStat2)  TRIM( '(s)' )
-				IF (other%LineList(I)%OutFlagList(2) == 1) THEN
-					WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((3+3*other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
-						( p%Delim, '(m)', p%Delim, '(m)', p%Delim, '(m)', J=0,(other%LineList(I)%N) )
-				END IF
-				IF (other%LineList(I)%OutFlagList(3) == 1) THEN
-					WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((3+3*other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
-						( p%Delim, '(m/s)', p%Delim, '(m/s)', p%Delim, '(m/s)', J=0,(other%LineList(I)%N) )
-				END IF
-				IF (other%LineList(I)%OutFlagList(4) == 1) THEN
-					WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((3+3*other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
-						( p%Delim, '(m/s)', p%Delim, '(m/s)', p%Delim, '(m/s)', J=0,(other%LineList(I)%N) )
-				END IF
-				IF (other%LineList(I)%OutFlagList(5) == 1) THEN
-					WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((3+3*other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
-						( p%Delim, '(N)', p%Delim, '(N)', p%Delim, '(N)', J=0,(other%LineList(I)%N) )
-				END IF
-				IF (other%LineList(I)%OutFlagList(6) == 1) THEN
-					WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
-						( p%Delim, '(N)', J=1,(other%LineList(I)%N) )
-				END IF
-				IF (other%LineList(I)%OutFlagList(7) == 1) THEN
-					WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
-						( p%Delim, '(N)', J=1,(other%LineList(I)%N) )
-				END IF
-				IF (other%LineList(I)%OutFlagList(8) == 1) THEN
-					WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
-						( p%Delim, '(-)', J=1,(other%LineList(I)%N) )
-				END IF
-				IF (other%LineList(I)%OutFlagList(9) == 1) THEN
-					WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
-						( p%Delim, '(1/s)', J=1,(other%LineList(I)%N) )
-				END IF
-				
-				WRITE(other%LineList(I)%LineUnOut,'(A1)', IOSTAT=ErrStat2) ' '  ! make line break at the end
-				
+            WRITE(other%LineList(I)%LineUnOut,'(A10)', advance='no', IOSTAT=ErrStat2)  TRIM( '(s)' )
+            IF (other%LineList(I)%OutFlagList(2) == 1) THEN
+               WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((3+3*other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
+                  ( p%Delim, '(m)', p%Delim, '(m)', p%Delim, '(m)', J=0,(other%LineList(I)%N) )
+            END IF
+            IF (other%LineList(I)%OutFlagList(3) == 1) THEN
+               WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((3+3*other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
+                  ( p%Delim, '(m/s)', p%Delim, '(m/s)', p%Delim, '(m/s)', J=0,(other%LineList(I)%N) )
+            END IF
+            IF (other%LineList(I)%OutFlagList(4) == 1) THEN
+               WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((3+3*other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
+                  ( p%Delim, '(m/s)', p%Delim, '(m/s)', p%Delim, '(m/s)', J=0,(other%LineList(I)%N) )
+            END IF
+            IF (other%LineList(I)%OutFlagList(5) == 1) THEN
+               WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((3+3*other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
+                  ( p%Delim, '(N)', p%Delim, '(N)', p%Delim, '(N)', J=0,(other%LineList(I)%N) )
+            END IF
+            IF (other%LineList(I)%OutFlagList(6) == 1) THEN
+               WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
+                  ( p%Delim, '(N)', J=1,(other%LineList(I)%N) )
+            END IF
+            IF (other%LineList(I)%OutFlagList(7) == 1) THEN
+               WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
+                  ( p%Delim, '(N)', J=1,(other%LineList(I)%N) )
+            END IF
+            IF (other%LineList(I)%OutFlagList(8) == 1) THEN
+               WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
+                  ( p%Delim, '(-)', J=1,(other%LineList(I)%N) )
+            END IF
+            IF (other%LineList(I)%OutFlagList(9) == 1) THEN
+               WRITE(other%LineList(I)%LineUnOut,'('//TRIM(Int2LStr((other%LineList(I)%N)))//'(A1,A10))', advance='no', IOSTAT=ErrStat2) &
+                  ( p%Delim, '(1/s)', J=1,(other%LineList(I)%N) )
+            END IF
+            
+            WRITE(other%LineList(I)%LineUnOut,'(A1)', IOSTAT=ErrStat2) ' '  ! make line break at the end
+            
          END IF  ! if line is flagged for output file
          
       END DO ! I - line number
@@ -1285,11 +1285,11 @@ CONTAINS
            ! Segment internal damping force
            IF (other%LineList(I)%OutFlagList(7) == 1) THEN
               DO J = 1,other%LineList(I)%N  
-				     IF (( other%LineList(I)%Td(3,J)*other%LineList(I)%T(3,J) ) > 0)  THEN  ! if statement for handling sign (positive = tension)
+                 IF (( other%LineList(I)%Td(3,J)*other%LineList(I)%T(3,J) ) > 0)  THEN  ! if statement for handling sign (positive = tension)
                     other%LineList(I)%LineWrOutput(L) = TwoNorm(other%LineList(I)%Td(:,J) )
-					  ELSE
+                 ELSE
                     other%LineList(I)%LineWrOutput(L) = -TwoNorm(other%LineList(I)%Td(:,J) )
-					  END IF
+                 END IF
                  L = L+1
               END DO
            END IF

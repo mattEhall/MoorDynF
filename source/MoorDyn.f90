@@ -68,7 +68,7 @@ CONTAINS
       REAL(ReKi), ALLOCATABLE                      :: FairTensIC(:,:)! array of size Nfairs, 3 to store three latest fairlead tensions of each line
       CHARACTER(20)                                :: TempString     ! temporary string for incidental use
       INTEGER(IntKi)                               :: ErrStat2       ! Error status of the operation
-      CHARACTER(LEN(ErrMsg))                       :: ErrMsg2        ! Error message if ErrStat2 /= ErrID_None
+      CHARACTER(ErrMsgLen)                         :: ErrMsg2        ! Error message if ErrStat2 /= ErrID_None
       
       TYPE(MD_InputType)    :: uArray(1)    ! a size-one array for u to make call to TimeStep happy
       REAL(DbKi)            :: utimes(1)    ! a size-one array saying time is 0 to make call to TimeStep happy  
@@ -393,7 +393,9 @@ CONTAINS
       t = 0.0_ReKi     ! start time at zero
 
       ! because TimeStep wants an array...
-      uArray(1) = u
+!bjj: >> fix potential memory leak (we've got pointers in here!)
+      !uArray(1) = u
+      call MD_CopyInput( u, uArray(1), MESH_NEWCOPY, ErrStat2, ErrMsg2 )
 
 
       DO I = 1, ceiling(InitInp%TMaxIC/InitInp%DTIC)   ! loop through IC gen time steps, up to maximum
@@ -437,6 +439,7 @@ CONTAINS
 
       END DO ! I ... looping through time steps
 
+      CALL MD_DestroyInput( uArray(1), ErrStat2, ErrMsg2 )
 
       ! UNboost drag coefficient of each line type
       DO I = 1, p%NTypes
@@ -1025,7 +1028,7 @@ CONTAINS
          ! itself, which will be added below.
 
 
-         IF (EqualRealNos(t, 0.0)) THEN  ! this is old: with current IC gen approach, we skip the first call to the line objects, because they're set AFTER the call to the connects
+         IF (EqualRealNos(t, 0.0_ReKi)) THEN  ! this is old: with current IC gen approach, we skip the first call to the line objects, because they're set AFTER the call to the connects
 
             DO J = 1,3
                Xd(3+I) = X(I)        ! velocities - these are unused in integration
