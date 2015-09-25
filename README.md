@@ -2,7 +2,7 @@ MoorDyn is a lumped-mass mooring line model for simulating the dynamics of moori
 
 Author: [Matthew Hall](mailto:matthew.hall@umit.maine.edu)
 
-Two versions of MoorDyn exist: the Fortran FAST v8 module hosted on this page, and a C++ implementation designed for easy coupling with models (in C, Fortran, Matlab/Simulink, etc.).  The latter version is hosted at <www.matt-hall.ca/software/MoorDyn>.
+Two versions of MoorDyn exist: the Fortran FAST v8 module hosted on this page, and a C++ implementation designed for easy coupling with models (in C, Fortran, Matlab/Simulink, etc.).  The latter version is hosted at <http://www.matt-hall.ca/software/MoorDyn>.
 
 
 ## Documentation
