@@ -17,8 +17,8 @@
 ! limitations under the License.
 !
 !**********************************************************************************************************************************
-! File last committed: $Date: 2015-04-30 12:53:04 -0600 (Thu, 30 Apr 2015) $
-! (File) Revision #: $Rev: 300 $
+! File last committed: $Date: 2015-10-05 20:11:24 -0600 (Mon, 05 Oct 2015) $
+! (File) Revision #: $Rev: 344 $
 ! URL: $HeadURL: https://windsvn.nrel.gov/NWTC_Library/trunk/source/ModMesh_Types.f90 $
 !**********************************************************************************************************************************
 MODULE ModMesh_Types
@@ -77,6 +77,7 @@ MODULE ModMesh_Types
    INTEGER, PUBLIC, PARAMETER :: MESH_SIBLING         = 2
    INTEGER, PUBLIC, PARAMETER :: MESH_UPDATECOPY      = 3
    INTEGER, PUBLIC, PARAMETER :: MESH_UPDATEREFERENCE = 4
+   INTEGER, PUBLIC, PARAMETER :: MESH_COUSIN          = 5
 
    INTEGER, PUBLIC, PARAMETER :: MESH_NEXT  = -2
    INTEGER, PUBLIC, PARAMETER :: MESH_NOMOREELEMS  = -3
@@ -124,7 +125,7 @@ MODULE ModMesh_Types
 
      ! Node position and reference orientation, which are always allocated (and shared between siblings):
       REAL(ReKi), POINTER :: Position(:,:) => NULL()         ! XYZ coordinate of node (3,:)
-      REAL(ReKi), POINTER :: RefOrientation(:,:,:) => NULL() ! Original/reference orientation [DCM] (3,3,:)
+      REAL(R8Ki), POINTER :: RefOrientation(:,:,:) => NULL() ! Original/reference orientation [DCM] (3,3,:)
 
 ! Here are some built in derived data types that can represent values at the nodes
 ! the last dimension of each of these has range 1:nnodes for the mesh being represented
@@ -137,8 +138,8 @@ MODULE ModMesh_Types
 
       REAL(ReKi), ALLOCATABLE :: Force(:,:)              ! Field: Force vectors (3,NNodes)
       REAL(ReKi), ALLOCATABLE :: Moment(:,:)             ! Field: Moment vectors (3,NNodes)
-      REAL(ReKi), ALLOCATABLE :: Orientation(:,:,:)      ! Field: Direction Cosine Matrix (DCM) (3,3,NNodes)
-      REAL(ReKi), ALLOCATABLE :: TranslationDisp(:,:)    ! Field: Translational displacements (3,NNodes)
+      REAL(R8Ki), ALLOCATABLE :: Orientation(:,:,:)      ! Field: Direction Cosine Matrix (DCM) (3,3,NNodes)
+      REAL(R8Ki), ALLOCATABLE :: TranslationDisp(:,:)    ! Field: Translational displacements (3,NNodes)
       REAL(ReKi), ALLOCATABLE :: RotationVel(:,:)        ! Field: Rotational velocities (3,NNodes)
       REAL(ReKi), ALLOCATABLE :: TranslationVel(:,:)     ! Field: Translational velocities (3,NNodes)
       REAL(ReKi), ALLOCATABLE :: RotationAcc(:,:)        ! Field: Rotational accelerations (3,NNodes)
@@ -232,6 +233,7 @@ CONTAINS
       Dest%Xelement   = Src%Xelement
       Dest%Nneighbors = Src%Nneighbors
       Dest%det_jac    = Src%det_jac
+      if (allocated(Src%ElemNodes)) &   ! bjj: 9/12/15 added this because of invalid memory address (harmless?) found with Inspector
       CALL Move_Alloc( Src%ElemNodes,  Dest%ElemNodes )
              
    END SUBROUTINE Mesh_MoveAlloc_ElemRecType

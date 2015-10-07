@@ -17,8 +17,8 @@
 ! limitations under the License.
 !
 !**********************************************************************************************************************************
-! File last committed: $Date: 2015-05-09 16:21:07 -0600 (Sat, 09 May 2015) $
-! (File) Revision #: $Rev: 306 $
+! File last committed: $Date: 2015-10-05 20:11:24 -0600 (Mon, 05 Oct 2015) $
+! (File) Revision #: $Rev: 344 $
 ! URL: $HeadURL: https://windsvn.nrel.gov/NWTC_Library/trunk/source/ModMesh.f90 $
 !**********************************************************************************************************************************
 MODULE ModMesh
@@ -928,11 +928,11 @@ CONTAINS
      Re_BufSz = 0
      IF (Mesh%Initialized) THEN
         Re_BufSz = Re_BufSz + Mesh%Nnodes * 3 ! Position
-        Re_BufSz = Re_BufSz + Mesh%Nnodes * 9 ! RefOrientation
+        !Re_BufSz = Re_BufSz + Mesh%Nnodes * 9 ! RefOrientation
         IF ( Mesh%FieldMask(MASKID_FORCE) ) Re_BufSz = Re_BufSz + Mesh%Nnodes * 3
         IF ( Mesh%FieldMask(MASKID_MOMENT) ) Re_BufSz = Re_BufSz + Mesh%Nnodes * 3
-        IF ( Mesh%FieldMask(MASKID_ORIENTATION) ) Re_BufSz = Re_BufSz + Mesh%Nnodes * 9
-        IF ( Mesh%FieldMask(MASKID_TRANSLATIONDISP) ) Re_BufSz = Re_BufSz + Mesh%Nnodes * 3
+        !IF ( Mesh%FieldMask(MASKID_ORIENTATION) ) Re_BufSz = Re_BufSz + Mesh%Nnodes * 9
+        !IF ( Mesh%FieldMask(MASKID_TRANSLATIONDISP) ) Re_BufSz = Re_BufSz + Mesh%Nnodes * 3
         IF ( Mesh%FieldMask(MASKID_ROTATIONVEL) ) Re_BufSz = Re_BufSz + Mesh%Nnodes * 3
         IF ( Mesh%FieldMask(MASKID_TRANSLATIONVEL) ) Re_BufSz = Re_BufSz + Mesh%Nnodes * 3
         IF ( Mesh%FieldMask(MASKID_ROTATIONACC) ) Re_BufSz = Re_BufSz + Mesh%Nnodes * 3
@@ -944,7 +944,11 @@ CONTAINS
      ! get number of double values (none now)
      !.........................................
      Db_BufSz = 0
-          
+     IF (Mesh%Initialized) THEN
+        Db_BufSz = Db_BufSz + Mesh%Nnodes * 9 ! RefOrientation
+        IF ( Mesh%FieldMask(MASKID_ORIENTATION) ) Db_BufSz = Db_BufSz + Mesh%Nnodes * 9
+        IF ( Mesh%FieldMask(MASKID_TRANSLATIONDISP) ) Db_BufSz = Db_BufSz + Mesh%Nnodes * 3
+     END IF 
      
      !.........................................
      ! allocate buffer arrays
@@ -1015,14 +1019,14 @@ CONTAINS
          
       END IF         
      
-     ! ..... fill ReKiBuf .....
+     ! ..... fill ReKiBuf and DbKiBuf .....
      IF (Mesh%Initialized) THEN
          DO i = 1, Mesh%Nnodes ! Position
             ReKiBuf(Re_Xferred:Re_Xferred+2) = Mesh%Position(:,i); Re_Xferred = Re_Xferred + 3
          END DO
          DO i = 1, Mesh%Nnodes ! RefOrientation
             DO j = 1,3
-               ReKiBuf(Re_Xferred:Re_Xferred+2) = Mesh%RefOrientation(:,j,i); Re_Xferred = Re_Xferred + 3
+               DbKiBuf(Db_Xferred:Db_Xferred+2) = Mesh%RefOrientation(:,j,i); Db_Xferred = Db_Xferred + 3
             ENDDO
          END DO
                 
@@ -1039,13 +1043,13 @@ CONTAINS
          IF ( Mesh%FieldMask(MASKID_ORIENTATION) ) THEN ! Orientation
             DO i = 1, Mesh%Nnodes 
                DO j = 1,3
-                  ReKiBuf(Re_Xferred:Re_Xferred+2) = Mesh%Orientation(:,j,i); Re_Xferred = Re_Xferred + 3
+                  DbKiBuf(Db_Xferred:Db_Xferred+2) = Mesh%Orientation(:,j,i); Db_Xferred = Db_Xferred + 3
                ENDDO
             END DO
          ENDIF
          IF ( Mesh%FieldMask(MASKID_TRANSLATIONDISP) ) THEN ! TranslationDisp
             DO i = 1, Mesh%Nnodes
-               ReKiBuf(Re_Xferred:Re_Xferred+2) = Mesh%TranslationDisp(:,i); Re_Xferred = Re_Xferred + 3
+               DbKiBuf(Db_Xferred:Db_Xferred+2) = Mesh%TranslationDisp(:,i); Db_Xferred = Db_Xferred + 3
             ENDDO
          ENDIF
          IF ( Mesh%FieldMask(MASKID_ROTATIONVEL) ) THEN ! RotationVel
@@ -1236,7 +1240,7 @@ CONTAINS
       END DO
       DO i = 1, Mesh%Nnodes ! RefOrientation
          DO j = 1,3
-            Mesh%RefOrientation(:,j,i) = ReKiBuf(Re_Xferred:Re_Xferred+2); Re_Xferred = Re_Xferred + 3
+            Mesh%RefOrientation(:,j,i) = DbKiBuf(Db_Xferred:Db_Xferred+2); Db_Xferred = Db_Xferred + 3
          ENDDO
       END DO
                 
@@ -1253,7 +1257,7 @@ CONTAINS
       IF ( FieldMask(MASKID_ORIENTATION) ) THEN ! Orientation
          DO i = 1, Mesh%Nnodes 
             DO j = 1,3
-               Mesh%Orientation(:,j,i) = ReKiBuf(Re_Xferred:Re_Xferred+2); Re_Xferred = Re_Xferred + 3
+               Mesh%Orientation(:,j,i) = DbKiBuf(Db_Xferred:Db_Xferred+2); Db_Xferred = Db_Xferred + 3
             ENDDO
          END DO
       ENDIF
@@ -1363,19 +1367,44 @@ CONTAINS
 
       IF (.NOT. SrcMesh%Initialized) RETURN !bjj: maybe we should first CALL MeshDestroy(DestMesh,ErrStat, ErrMess)
 
-      IF ( CtrlCode .EQ. MESH_NEWCOPY .OR. CtrlCode .EQ. MESH_SIBLING ) THEN
-
-         IF ( CtrlCode .EQ. MESH_NEWCOPY ) THEN
-            CALL MeshCreate( DestMesh, IOS=SrcMesh%IOS, Nnodes=SrcMesh%Nnodes, ErrStat=ErrStat, ErrMess=ErrMess &
-                            ,Force=SrcMesh%FieldMask(MASKID_FORCE)                                              &
-                            ,Moment=SrcMesh%FieldMask(MASKID_MOMENT)                                            &
-                            ,Orientation=SrcMesh%FieldMask(MASKID_ORIENTATION)                                  &
-                            ,TranslationDisp=SrcMesh%FieldMask(MASKID_TRANSLATIONDISP)                          &
-                            ,TranslationVel=SrcMesh%FieldMask(MASKID_TRANSLATIONVEL)                            &
-                            ,RotationVel=SrcMesh%FieldMask(MASKID_ROTATIONVEL)                                  &
-                            ,TranslationAcc=SrcMesh%FieldMask(MASKID_TRANSLATIONACC)                            &
-                            ,RotationAcc=SrcMesh%FieldMask(MASKID_ROTATIONACC)                                  &
-                            ,nScalars=SrcMesh%nScalars                                                          )
+      IF ( CtrlCode .EQ. MESH_NEWCOPY .OR. CtrlCode .EQ. MESH_SIBLING .OR. CtrlCode .EQ. MESH_COUSIN ) THEN
+         
+         IF (CtrlCode .EQ. MESH_NEWCOPY) THEN
+            IOS_l              = SrcMesh%IOS 
+            Force_l            = SrcMesh%FieldMask(MASKID_FORCE)                     
+            Moment_l           = SrcMesh%FieldMask(MASKID_MOMENT)                   
+            Orientation_l      = SrcMesh%FieldMask(MASKID_ORIENTATION)         
+            TranslationDisp_l  = SrcMesh%FieldMask(MASKID_TRANSLATIONDISP) 
+            TranslationVel_l   = SrcMesh%FieldMask(MASKID_TRANSLATIONVEL)   
+            RotationVel_l      = SrcMesh%FieldMask(MASKID_ROTATIONVEL)         
+            TranslationAcc_l   = SrcMesh%FieldMask(MASKID_TRANSLATIONACC)   
+            RotationAcc_l      = SrcMesh%FieldMask(MASKID_ROTATIONACC)         
+            nScalars_l         = SrcMesh%nScalars          
+         ELSE ! Sibling or cousin
+            IOS_l          = SrcMesh%IOS ; IF ( PRESENT(IOS) )                         IOS_l = IOS
+            Force_l            = .FALSE. ; IF ( PRESENT(Force) )                     Force_l = Force
+            Moment_l           = .FALSE. ; IF ( PRESENT(Moment) )                   Moment_l = Moment
+            Orientation_l      = .FALSE. ; IF ( PRESENT(Orientation) )         Orientation_l = Orientation
+            TranslationDisp_l  = .FALSE. ; IF ( PRESENT(TranslationDisp) ) TranslationDisp_l = TranslationDisp
+            TranslationVel_l   = .FALSE. ; IF ( PRESENT(TranslationVel) )   TranslationVel_l = TranslationVel
+            RotationVel_l      = .FALSE. ; IF ( PRESENT(RotationVel) )         RotationVel_l = RotationVel
+            TranslationAcc_l   = .FALSE. ; IF ( PRESENT(TranslationAcc) )   TranslationAcc_l = TranslationAcc
+            RotationAcc_l      = .FALSE. ; IF ( PRESENT(RotationAcc) )         RotationAcc_l = RotationAcc
+            nScalars_l         = 0       ; IF ( PRESENT(nScalars) )               nScalars_l = nScalars
+         END IF
+            
+         IF ( CtrlCode .EQ. MESH_NEWCOPY .OR. CtrlCode .EQ. MESH_COUSIN ) THEN
+                                    
+            CALL MeshCreate( DestMesh, IOS=IOS_l, Nnodes=SrcMesh%Nnodes, ErrStat=ErrStat, ErrMess=ErrMess &
+                            ,Force=Force_l                                                                &
+                            ,Moment=Moment_l                                                              &
+                            ,Orientation=Orientation_l                                                    &
+                            ,TranslationDisp=TranslationDisp_l                                            &
+                            ,TranslationVel=TranslationVel_l                                              &
+                            ,RotationVel=RotationVel_l                                                    &
+                            ,TranslationAcc=TranslationAcc_l                                              &
+                            ,RotationAcc=RotationAcc_l                                                    &
+                            ,nScalars=nScalars_l                                                          )
 
             IF (ErrStat >= AbortErrLev) RETURN
 
@@ -1455,16 +1484,6 @@ CONTAINS
                RETURN !early return
             END IF
 
-            IOS_l          = SrcMesh%IOS ; IF ( PRESENT(IOS) )                         IOS_l = IOS
-            Force_l            = .FALSE. ; IF ( PRESENT(Force) )                     Force_l = Force
-            Moment_l           = .FALSE. ; IF ( PRESENT(Moment) )                   Moment_l = Moment
-            Orientation_l      = .FALSE. ; IF ( PRESENT(Orientation) )         Orientation_l = Orientation
-            TranslationDisp_l  = .FALSE. ; IF ( PRESENT(TranslationDisp) ) TranslationDisp_l = TranslationDisp
-            TranslationVel_l   = .FALSE. ; IF ( PRESENT(TranslationVel) )   TranslationVel_l = TranslationVel
-            RotationVel_l      = .FALSE. ; IF ( PRESENT(RotationVel) )         RotationVel_l = RotationVel
-            TranslationAcc_l   = .FALSE. ; IF ( PRESENT(TranslationAcc) )   TranslationAcc_l = TranslationAcc
-            RotationAcc_l      = .FALSE. ; IF ( PRESENT(RotationAcc) )         RotationAcc_l = RotationAcc
-            nScalars_l         = 0       ; IF ( PRESENT(nScalars) )               nScalars_l = nScalars
             CALL MeshCreate( DestMesh, IOS=IOS_l, Nnodes=SrcMesh%Nnodes, ErrStat=ErrStat, ErrMess=ErrMess   &
                             ,Force=Force_l                                                                  &
                             ,Moment=Moment_l                                                                &
@@ -1561,7 +1580,7 @@ CONTAINS
      REAL(ReKi),                  INTENT(IN   ) :: Pos(3)       ! Xi,Yi,Zi, coordinates of node
      INTEGER(IntKi),              INTENT(  OUT) :: ErrStat      ! Error code
      CHARACTER(*),                INTENT(  OUT) :: ErrMess      ! Error message
-     REAL(ReKi), OPTIONAL,        INTENT(IN   ) :: Orient(3,3)  ! Orientation (direction cosine matrix) of node; identity by default
+     REAL(R8Ki), OPTIONAL,        INTENT(IN   ) :: Orient(3,3)  ! Orientation (direction cosine matrix) of node; identity by default
      
      ErrStat = ErrID_None
      ErrMess = ""
@@ -1610,9 +1629,9 @@ CONTAINS
      IF ( PRESENT(Orient) ) THEN
         Mesh%RefOrientation(:,:,Inode) = Orient
      ELSE
-        Mesh%RefOrientation(:,1,Inode) = (/ 1., 0., 0. /)
-        Mesh%RefOrientation(:,2,Inode) = (/ 0., 1., 0. /)
-        Mesh%RefOrientation(:,3,Inode) = (/ 0., 0., 1. /)
+        Mesh%RefOrientation(:,1,Inode) = (/ 1._R8Ki, 0._R8Ki, 0._R8Ki /)
+        Mesh%RefOrientation(:,2,Inode) = (/ 0._R8Ki, 1._R8Ki, 0._R8Ki /)
+        Mesh%RefOrientation(:,3,Inode) = (/ 0._R8Ki, 0._R8Ki, 1._R8Ki /)
      END IF
 
      RETURN
@@ -1637,6 +1656,12 @@ CONTAINS
 
      !TYPE(ElemListType), POINTER :: tmp(:)
 
+     IF (Mesh%Committed) then
+       ErrStat = ErrID_Warn
+       ErrMess = "MeshCommit: mesh was already committed."
+       RETURN  ! Early return
+     ENDIF
+     
      ! Check for spatial constraints -- can't mix 1D with 2D with 3D
      n0d = Mesh%ElemTable(ELEMENT_POINT)%nelem
      n1d = Mesh%ElemTable(ELEMENT_LINE2)%nelem+Mesh%ElemTable(ELEMENT_LINE3)%nelem
@@ -2226,8 +2251,9 @@ CONTAINS
     REAL(DbKi)                          :: t_out                     ! Time to which to be extrap/interpd
                                                                      
     REAL(DbKi)                          :: scaleFactor               ! temporary for extrapolation/interpolation
-    REAL(ReKi)                          :: tensor(3, order+1)        ! for extrapolation of orientations 
-    REAL(ReKi)                          :: tensor_interp(3)          ! for extrapolation of orientations    
+    REAL(DbKi)                          :: tensor(3, order+1)        ! for extrapolation of orientations 
+    REAL(DbKi)                          :: tensor_interp(3)          ! for extrapolation of orientations    
+    REAL(DbKi)                          :: Orient(3,3)               ! for extrapolation of orientations    
     
     INTEGER(IntKi)                      :: node                      ! node counter
 
@@ -2291,26 +2317,38 @@ CONTAINS
 
       IF ( ALLOCATED(u1%Orientation) ) THEN
                   
-         DO node=1,u_out%Nnodes
+         if ( EqualRealNos(t_out, t(1)) ) then
+            u_out%Orientation = u1%Orientation
+         elseif ( EqualRealNos(t_out, t(2)) ) then
+            u_out%Orientation = u2%Orientation
+         else
+                                 
+            DO node=1,u_out%Nnodes
             
-            CALL DCM_logmap ( u1%Orientation(:,:,node), tensor(:,1), ErrStat, ErrMsg )
-               IF (ErrStat >= AbortErrLev ) THEN 
-                  ErrMsg = 'MeshExtrapInterp1:'//TRIM(ErrMsg)
-                  RETURN
-               END IF
-            CALL DCM_logmap ( u2%Orientation(:,:,node), tensor(:,2), ErrStat, ErrMsg )
-               IF (ErrStat >= AbortErrLev ) THEN 
-                  ErrMsg = 'MeshExtrapInterp1:'//TRIM(ErrMsg)
-                  RETURN
-               END IF
+               Orient = u1%Orientation(:,:,node)
+               CALL DCM_logmap ( Orient, tensor(:,1), ErrStat, ErrMsg )
+                  IF (ErrStat >= AbortErrLev ) THEN 
+                     ErrMsg = 'MeshExtrapInterp1:'//TRIM(ErrMsg)
+                     RETURN
+                  END IF
+                  
+               Orient = u2%Orientation(:,:,node)
+               CALL DCM_logmap ( Orient, tensor(:,2), ErrStat, ErrMsg )
+                  IF (ErrStat >= AbortErrLev ) THEN 
+                     ErrMsg = 'MeshExtrapInterp1:'//TRIM(ErrMsg)
+                     RETURN
+                  END IF
                                     
-            CALL DCM_SetLogMapForInterp( tensor )            
+               CALL DCM_SetLogMapForInterp( tensor )            
                       
-            tensor_interp  = tensor(:,1) + (tensor(:,2) - tensor(:,1)) * scaleFactor            
+               tensor_interp  = tensor(:,1) + (tensor(:,2) - tensor(:,1)) * scaleFactor            
                                                 
-            u_out%Orientation(:,:,node) = DCM_exp( tensor_interp )                              
-         END DO                     
-         
+               u_out%Orientation(:,:,node) = DCM_exp( tensor_interp ) 
+               
+            END DO
+            
+         end if
+                  
       END IF
 
    END SUBROUTINE MeshExtrapInterp1
@@ -2337,8 +2375,9 @@ CONTAINS
     REAL(DbKi)                          :: t(SIZE(tin))              ! Times associated with the inputs
     REAL(DbKi)                          :: t_out                     ! Time to which to be extrap/interpd                                                                     
     REAL(DbKi)                          :: scaleFactor               ! temporary for extrapolation/interpolation    
-    REAL(ReKi)                          :: tensor(3, order+1)        ! for extrapolation of orientations 
-    REAL(ReKi)                          :: tensor_interp(3)          ! for extrapolation of orientations 
+    REAL(DbKi)                          :: tensor(3, order+1)        ! for extrapolation of orientations 
+    REAL(DbKi)                          :: tensor_interp(3)          ! for extrapolation of orientations 
+    REAL(DbKi)                          :: Orient(3,3)               ! for extrapolation of orientations    
     
     INTEGER(IntKi)                      :: node                      ! node counter
     
@@ -2440,38 +2479,46 @@ CONTAINS
 
       IF ( ALLOCATED(u1%Orientation) ) THEN
                      
-         DO node=1,u_out%Nnodes
-            CALL DCM_logmap ( u1%Orientation(:,:,node), tensor(:,1), ErrStat, ErrMsg )
-               IF (ErrStat >= AbortErrLev ) THEN 
-                  ErrMsg = 'MeshExtrapInterp2:'//TRIM(ErrMsg)
-                  RETURN
-               END IF
-            CALL DCM_logmap ( u2%Orientation(:,:,node), tensor(:,2), ErrStat, ErrMsg )
-               IF (ErrStat >= AbortErrLev ) THEN 
-                  ErrMsg = 'MeshExtrapInterp2:'//TRIM(ErrMsg)
-                  RETURN
-               END IF
-            CALL DCM_logmap ( u3%Orientation(:,:,node), tensor(:,3), ErrStat, ErrMsg )
-               IF (ErrStat >= AbortErrLev ) THEN 
-                  ErrMsg = 'MeshExtrapInterp2:'//TRIM(ErrMsg)
-                  RETURN
-               END IF
-! call WrReAryFileNR ( DEBUG_UNIT, (/ REAL(tin,ReKi), REAL(tin_out,ReKi) /), 'F15.5,1x', ErrStat, ErrMsg  )
-! call WrReAryFileNR ( DEBUG_UNIT, tensor(:,1), 'F15.5,1x', ErrStat, ErrMsg  )
-! call WrReAryFileNR ( DEBUG_UNIT, tensor(:,2), 'F15.5,1x', ErrStat, ErrMsg  )
-! call WrReAryFileNR ( DEBUG_UNIT, tensor(:,3), 'F15.5,1x', ErrStat, ErrMsg  )
-            
-!            CALL SetAnglesForInterp( tensor )
-            CALL DCM_SetLogMapForInterp( tensor )
+         if ( EqualRealNos(t_out, t(1)) ) then
+            u_out%Orientation = u1%Orientation
+         elseif ( EqualRealNos(t_out, t(2)) ) then
+            u_out%Orientation = u2%Orientation
+         elseif ( EqualRealNos(t_out, t(3)) ) then
+            u_out%Orientation = u3%Orientation
+         else                  
+            DO node=1,u_out%Nnodes
+               
+               Orient = u1%Orientation(:,:,node)
+               CALL DCM_logmap ( Orient, tensor(:,1), ErrStat, ErrMsg )
+                  IF (ErrStat >= AbortErrLev ) THEN 
+                     ErrMsg = 'MeshExtrapInterp2:'//TRIM(ErrMsg)
+                     RETURN
+                  END IF
+                  
+               Orient = u2%Orientation(:,:,node)
+               CALL DCM_logmap ( Orient, tensor(:,2), ErrStat, ErrMsg )
+                  IF (ErrStat >= AbortErrLev ) THEN 
+                     ErrMsg = 'MeshExtrapInterp2:'//TRIM(ErrMsg)
+                     RETURN
+                  END IF
+                  
+               Orient = u3%Orientation(:,:,node)
+               CALL DCM_logmap ( Orient, tensor(:,3), ErrStat, ErrMsg )
+                  IF (ErrStat >= AbortErrLev ) THEN 
+                     ErrMsg = 'MeshExtrapInterp2:'//TRIM(ErrMsg)
+                     RETURN
+                  END IF
+               
+               CALL DCM_SetLogMapForInterp( tensor )
                                               
-            tensor_interp =   tensor(:,1) &
-                              + ( t(3)**2 * (tensor(:,1) - tensor(:,2)) + t(2)**2*(-tensor(:,1) + tensor(:,3)) )*scaleFactor &
-                              + ( (t(2)-t(3))*tensor(:,1) + t(3)*tensor(:,2) - t(2)*tensor(:,3) )*scaleFactor * t_out
-            u_out%Orientation(:,:,node) = DCM_exp( tensor_interp )  
-! write(DEBUG_UNIT,'(50(F15.5,1x))') tensor_interp ,  tensor, tensor_interp, u3%Orientation(:,:,node),  u_out%Orientation(:,:,node) !bjj: adding the "small rot angles" columns so I don't have to redo Matlab debugging code         
+               tensor_interp =   tensor(:,1) &
+                                 + ( t(3)**2 * (tensor(:,1) - tensor(:,2)) + t(2)**2*(-tensor(:,1) + tensor(:,3)) )*scaleFactor &
+                                 + ( (t(2)-t(3))*tensor(:,1) + t(3)*tensor(:,2) - t(2)*tensor(:,3) )*scaleFactor * t_out
+               u_out%Orientation(:,:,node) = DCM_exp( tensor_interp )  
 
-         END DO
- 
+            END DO
+         end if
+         
                                                 
       END IF
 

@@ -17,8 +17,8 @@
 ! limitations under the License.
 !
 !**********************************************************************************************************************************
-! File last committed: $Date: 2015-04-30 12:53:04 -0600 (Thu, 30 Apr 2015) $
-! (File) Revision #: $Rev: 300 $
+! File last committed: $Date: 2015-10-04 17:43:34 -0600 (Sun, 04 Oct 2015) $
+! (File) Revision #: $Rev: 342 $
 ! URL: $HeadURL: https://windsvn.nrel.gov/NWTC_Library/trunk/source/ModMesh_Mapping.f90 $
 !**********************************************************************************************************************************
 ! This code implements the spatial mapping algorithms described in 
@@ -440,9 +440,10 @@ SUBROUTINE Transfer_Line2_to_Point( Src, Dest, MeshMap, ErrStat, ErrMsg, SrcDisp
    CHARACTER(*),           INTENT(  OUT) :: ErrMsg      ! Error message if ErrStat /= ErrID_None
 
 
-   REAL(ReKi)                              :: LoadsScaleFactor  ! bjj: added this scaling factor to get loads in a better numerical range 
-   INTEGER(IntKi)                          :: ErrStat2
-   CHARACTER(ErrMsgLen)                    :: ErrMsg2
+   REAL(ReKi)                            :: LoadsScaleFactor  ! bjj: added this scaling factor to get loads in a better numerical range 
+   INTEGER(IntKi)                        :: ErrStat2
+   CHARACTER(ErrMsgLen)                  :: ErrMsg2
+   CHARACTER(*), PARAMETER               :: RoutineName = 'Transfer_Line2_to_Point'
 
    
    ! logic
@@ -455,12 +456,12 @@ SUBROUTINE Transfer_Line2_to_Point( Src, Dest, MeshMap, ErrStat, ErrMsg, SrcDisp
    !.................   
    
    if (Src%ElemTable(ELEMENT_LINE2)%nelem .eq. 0) then
-      CALL SetErrStat( ErrID_Fatal, 'Source mesh must have one or more Line2 elements.', ErrStat, ErrMsg, 'Transfer_Line2_to_Point')
+      CALL SetErrStat( ErrID_Fatal, 'Source mesh must have one or more Line2 elements.', ErrStat, ErrMsg, RoutineName)
       RETURN
    endif
 
    if (Dest%ElemTable(ELEMENT_POINT)%nelem .eq. 0) then
-      CALL SetErrStat( ErrID_Fatal, 'Destination mesh must have one or more Point elements.', ErrStat, ErrMsg, 'Transfer_Line2_to_Point')
+      CALL SetErrStat( ErrID_Fatal, 'Destination mesh must have one or more Point elements.', ErrStat, ErrMsg, RoutineName)
       RETURN
    endif
 
@@ -480,7 +481,7 @@ SUBROUTINE Transfer_Line2_to_Point( Src, Dest, MeshMap, ErrStat, ErrMsg, SrcDisp
       if (Src%RemapFlag .or. Dest%RemapFlag ) then
 
          CALL CreateMotionMap_L2_to_P( Src, Dest, MeshMap, ErrStat2, ErrMsg2 )
-            CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Transfer_Line2_to_Point')
+            CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
             IF (ErrStat >= AbortErrLev) RETURN
 
       endif !remapping
@@ -491,7 +492,7 @@ SUBROUTINE Transfer_Line2_to_Point( Src, Dest, MeshMap, ErrStat, ErrMsg, SrcDisp
       !........................
 
       CALL Transfer_Motions_Line2_to_Point( Src, Dest, MeshMap, ErrStat2, ErrMsg2 )
-         CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Transfer_Line2_to_Point')
+         CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
          IF (ErrStat >= AbortErrLev) RETURN
 
    endif !algorithm for motions/scalars
@@ -517,14 +518,14 @@ SUBROUTINE Transfer_Line2_to_Point( Src, Dest, MeshMap, ErrStat, ErrMsg, SrcDisp
       if (Src%RemapFlag .or. Dest%RemapFlag ) then
 
          CALL CreateLoadMap_L2_to_P(Src, Dest, MeshMap, ErrStat2, ErrMsg2)         
-            CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Transfer_Line2_to_Point')
+            CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
             IF (ErrStat >= AbortErrLev) RETURN
          
 
       ELSE ! Check that the temporary mesh has been set
 
          IF ( .NOT. MeshMap%Lumped_Points_Src%Initialized ) THEN
-            CALL SetErrStat( ErrID_Fatal, 'MeshMap%Lumped_Points_Src not initialized (set RemapFlag = TRUE).', ErrStat, ErrMsg, 'Transfer_Line2_to_Point')
+            CALL SetErrStat( ErrID_Fatal, 'MeshMap%Lumped_Points_Src not initialized (set RemapFlag = TRUE).', ErrStat, ErrMsg, RoutineName)
             RETURN
          END IF
          
@@ -543,15 +544,15 @@ SUBROUTINE Transfer_Line2_to_Point( Src, Dest, MeshMap, ErrStat, ErrMsg, SrcDisp
          ! first, we take the source fields and transfer them to fields on the augmented source mesh:
          !  (we're also taking the SrcDisp field and putting it on our augmented mesh)
          CALL Transfer_Src_To_Augmented_Ln2_Src( Src, MeshMap, ErrStat2, ErrMsg2, SrcDisp, LoadsScaleFactor ) 
-            CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Transfer_Line2_to_Point')
+            CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
                   
          ! then we lump the loads from the augmented source mesh:
          CALL Lump_Line2_to_Point( MeshMap%Augmented_Ln2_Src,  MeshMap%Lumped_Points_Src,  ErrStat2, ErrMsg2, LoadsScaleFactor=LoadsScaleFactor  ) 
-            CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Transfer_Line2_to_Point')
+            CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
             IF (ErrStat >= AbortErrLev) RETURN
          
       ELSE
-         CALL SetErrStat( ErrID_Fatal, 'Invalid arguments to routine for transfer of loads.', ErrStat, ErrMsg, 'Transfer_Line2_to_Point')
+         CALL SetErrStat( ErrID_Fatal, 'Invalid arguments to routine for transfer of loads.', ErrStat, ErrMsg, RoutineName)
          RETURN
       END IF
 
@@ -564,11 +565,11 @@ SUBROUTINE Transfer_Line2_to_Point( Src, Dest, MeshMap, ErrStat, ErrMsg, SrcDisp
          
          ! and transferred the displacements to MeshMap%Augmented_Ln2_Src
          CALL Transfer_Loads_Point_to_Point( MeshMap%Lumped_Points_Src, Dest, MeshMap, ErrStat2, ErrMsg2, MeshMap%Augmented_Ln2_Src, DestDisp, LoadsScaleFactor )
-            CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Transfer_Line2_to_Point')
+            CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
             IF (ErrStat >= AbortErrLev) RETURN
          
       ELSE
-         CALL SetErrStat( ErrID_Fatal, 'Invalid arguments to routine for transfer of loads.', ErrStat, ErrMsg, 'Transfer_Line2_to_Point')
+         CALL SetErrStat( ErrID_Fatal, 'Invalid arguments to routine for transfer of loads.', ErrStat, ErrMsg, RoutineName)
          RETURN
       END IF
 
@@ -593,12 +594,16 @@ SUBROUTINE Transfer_Motions_Line2_to_Point( Src, Dest, MeshMap, ErrStat, ErrMsg 
       ! local variables
    INTEGER(IntKi)            :: i , j                          ! counter over the nodes
    INTEGER(IntKi)            :: n, n1, n2                      ! temporary space for node numbers
-   REAL(ReKi)                :: FieldValueN1(3)                ! Temporary variable to store field values on element nodes
-   REAL(ReKi)                :: FieldValueN2(3)                ! Temporary variable to store field values on element nodes
-   REAL(ReKi)                :: FieldValue(3,2)                ! Temporary variable to store values for DCM interpolation
+   REAL(R8Ki)                :: FieldValueN1(3)                ! Temporary variable to store field values on element nodes
+   REAL(R8Ki)                :: FieldValueN2(3)                ! Temporary variable to store field values on element nodes
    REAL(ReKi)                :: TmpVec(3)
-   REAL(ReKi)                :: RotationMatrix(3,3)
+   REAL(R8Ki)                :: RotationMatrix(3,3)
 
+   REAL(DbKi)                :: FieldValue(3,2)                ! Temporary variable to store values for DCM interpolation
+   REAL(DbKi)                :: RotationMatrixD(3,3)
+   REAL(DbKi)                :: tensor_interp(3)
+   REAL(DbKi)                :: theta(1)
+   
 
    ErrStat = ErrID_None
    ErrMsg  = ""
@@ -673,16 +678,6 @@ SUBROUTINE Transfer_Motions_Line2_to_Point( Src, Dest, MeshMap, ErrStat, ErrMsg 
          n1 = Src%ElemTable(ELEMENT_LINE2)%Elements(MeshMap%MapMotions(i)%OtherMesh_Element)%ElemNodes(1)
          n2 = Src%ElemTable(ELEMENT_LINE2)%Elements(MeshMap%MapMotions(i)%OtherMesh_Element)%ElemNodes(2)
 
-#ifdef __NN_ORIENTATIONS         
-         IF ( NINT( MeshMap%MapMotions(i)%shape_fn(2) ) == 0 ) THEN
-            n = n1
-         ELSE
-            n = n2
-         END IF
-         
-         Dest%Orientation(:,:,i) = MATMUL( MATMUL( Dest%RefOrientation(:,:,i), TRANSPOSE( Src%RefOrientation(:,:,n) ) )&
-                                          , Src%Orientation(:,:,n) )
-#else         
 #ifdef __ORIGINAL_LOGMAP    
             ! calculate Rotation matrix for FieldValueN1 and convert to tensor:
          RotationMatrix = MATMUL( MATMUL( Dest%RefOrientation(:,:,i), TRANSPOSE( Src%RefOrientation(:,:,n1) ) )&
@@ -712,30 +707,43 @@ SUBROUTINE Transfer_Motions_Line2_to_Point( Src, Dest, MeshMap, ErrStat, ErrMsg 
 #else         
 !this should be equivalent, with one less matrix multiply
          
+         ! bjj: because of numerical issues when the angle of rotation is pi, (where 
+         ! DCM_exp( DCM_logmap (x) ) isn't quite x
+      if ( EqualRealNos( MeshMap%MapMotions(i)%shape_fn(1), 1.0_ReKi ) ) then
+         RotationMatrixD = MATMUL( TRANSPOSE( Src%RefOrientation(:,:,n1) ), Src%Orientation(:,:,n1) )
+
+      elseif ( EqualRealNos( MeshMap%MapMotions(i)%shape_fn(2), 1.0_ReKi ) ) then
+         RotationMatrixD = MATMUL( TRANSPOSE( Src%RefOrientation(:,:,n2) ), Src%Orientation(:,:,n2) )
+
+      else
+         
             ! calculate Rotation matrix for FieldValueN1 and convert to tensor:
-         RotationMatrix = MATMUL( TRANSPOSE( Src%RefOrientation(:,:,n1) ), Src%Orientation(:,:,n1) )
+         RotationMatrixD = MATMUL( TRANSPOSE( Src%RefOrientation(:,:,n1) ), Src%Orientation(:,:,n1) )
          
-         CALL DCM_logmap( RotationMatrix, FieldValue(:,1), ErrStat, ErrMsg )
+         CALL DCM_logmap( RotationMatrixD, FieldValue(:,1), ErrStat, ErrMsg, theta(1) )
          IF (ErrStat >= AbortErrLev) RETURN
-         
+            
             ! calculate Rotation matrix for FieldValueN2 and convert to tensor:
-         RotationMatrix = MATMUL( TRANSPOSE( Src%RefOrientation(:,:,n2) ), Src%Orientation(:,:,n2) )
+         RotationMatrixD = MATMUL( TRANSPOSE( Src%RefOrientation(:,:,n2) ), Src%Orientation(:,:,n2) )
          
-         CALL DCM_logmap( RotationMatrix, FieldValue(:,2), ErrStat, ErrMsg )                  
+         CALL DCM_logmap( RotationMatrixD, FieldValue(:,2), ErrStat, ErrMsg, theta(1) )                  
          IF (ErrStat >= AbortErrLev) RETURN
-         
-         CALL DCM_SetLogMapForInterp( FieldValue )  ! make sure we don't cross a 2pi boundary
-         
+                              
+         CALL DCM_SetLogMapForInterp( FieldValue )  ! make sure we don't cross a 2pi boundary         
          
             ! interpolate tensors: 
-         TmpVec =   MeshMap%MapMotions(i)%shape_fn(1)*FieldValue(:,1)  &
-                  + MeshMap%MapMotions(i)%shape_fn(2)*FieldValue(:,2)    
+         tensor_interp =   MeshMap%MapMotions(i)%shape_fn(1)*FieldValue(:,1)  &
+                         + MeshMap%MapMotions(i)%shape_fn(2)*FieldValue(:,2)    
                   
             ! convert back to DCM:
-         Dest%Orientation(:,:,i) = MATMUL( Dest%RefOrientation(:,:,i), DCM_exp( TmpVec )  )
-         
+         RotationMatrixD = DCM_exp( tensor_interp )
+                     
+      end if
+      
+      RotationMatrix = REAL( RotationMatrixD, ReKi )
+      Dest%Orientation(:,:,i) = MATMUL( Dest%RefOrientation(:,:,i), RotationMatrix  )
+                  
 #endif         
-#endif
          
       end do
 
@@ -889,6 +897,7 @@ SUBROUTINE CreateMapping_ProjectToLine2(Mesh1, Mesh2, Map, Mesh1_TYPE, ErrStat, 
    REAL(ReKi)      :: dist
    REAL(ReKi)      :: min_dist
    REAL(ReKi)      :: elem_position
+   REAL(SiKi)      :: elem_position_SiKi
 
    REAL(ReKi)      :: Mesh1_xyz(3)
 
@@ -896,7 +905,6 @@ SUBROUTINE CreateMapping_ProjectToLine2(Mesh1, Mesh2, Map, Mesh1_TYPE, ErrStat, 
    REAL(ReKi)      :: n1_Point_vector(3)  ! vector going from node 1 in Line 2 element to Destination Point
    REAL(ReKi)      :: tmp(3)              ! temporary vector for cross product calculation
 
-   INTEGER(IntKi)  :: elem_with_min_dist
 
    INTEGER(IntKi)  :: iElem, iNode, i  ! do-loop counter for elements on Mesh1, associated node(S)
    INTEGER(IntKi)  :: jElem            ! do-loop counter for elements on Mesh2, associated node
@@ -914,7 +922,10 @@ SUBROUTINE CreateMapping_ProjectToLine2(Mesh1, Mesh2, Map, Mesh1_TYPE, ErrStat, 
 
 
    ! Map the source nodes to destination nodes:
-   Map(:)%OtherMesh_Element = NODE_NOT_MAPPED ! initialize this so we know if we've mapped this node already (done only because we may have different elements)
+   do n1=1,size(Map)
+      Map(n1)%OtherMesh_Element = NODE_NOT_MAPPED ! initialize this so we know if we've mapped this node already (done only because we may have different elements)
+   end do !n1
+      
 
 
    do iElem = 1, Mesh1%ElemTable(Mesh1_TYPE)%nelem   ! number of Mesh1_TYPE elements on Mesh1
@@ -954,12 +965,19 @@ SUBROUTINE CreateMapping_ProjectToLine2(Mesh1, Mesh2, Map, Mesh1_TYPE, ErrStat, 
                   ! note: i forumlated it this way because Fortran doesn't necessarially do shortcutting and I don't want to call EqualRealNos if we don't need it:
             if ( elem_position .ge. 0.0_ReKi .and. elem_position .le. 1.0_ReKi ) then !we're ON the element (between the two nodes)
                on_element = .true.
-            elseif (EqualRealNos( elem_position, 1.0_ReKi )) then !we're ON the element (at a node)
-               on_element = .true.
-            elseif (EqualRealNos( elem_position,  0.0_ReKi )) then !we're ON the element (at a node)
-               on_element = .true.
-            else !we're not on the element
-               on_element = .false.
+            else
+               elem_position_SiKi = REAL( elem_position, SiKi )
+               if (EqualRealNos( elem_position_SiKi, 1.0_SiKi )) then !we're ON the element (at a node)
+               !if (elem_position_SiKi <= 1.0005_SiKi ) then !we'll say we're ON the element (at a node)
+                  on_element = .true.
+                  elem_position = 1.0_ReKi
+               elseif (EqualRealNos( elem_position_SiKi,  0.0_SiKi )) then !we're ON the element (at a node)
+               !elseif (elem_position_SiKi >= -0.0005_SiKi ) then !we'll say we're ON the element (at a node)
+                  on_element = .true.
+                  elem_position = 0.0_ReKi
+               else !we're not on the element
+                  on_element = .false.
+               end if               
             end if
 
             if (on_element) then
@@ -988,8 +1006,8 @@ SUBROUTINE CreateMapping_ProjectToLine2(Mesh1, Mesh2, Map, Mesh1_TYPE, ErrStat, 
             ! if failed to find an element that the Point projected into, throw an error
          if (.not. found) then
 
-            if (elem_with_min_dist .lt. 1 )  then
-               CALL SetErrStat( ErrID_Fatal, 'node does not project onto any line2 element', ErrStat, ErrMsg, 'CreateMapping_ProjectToLine2')
+            if (Map(i)%OtherMesh_Element .lt. 1 )  then
+               CALL SetErrStat( ErrID_Fatal, 'Node '//trim(num2Lstr(i))//' does not project onto any line2 element.', ErrStat, ErrMsg, 'CreateMapping_ProjectToLine2')
                RETURN
             endif
 
@@ -1310,6 +1328,7 @@ SUBROUTINE Transfer_Point_to_Point( Src, Dest, MeshMap, ErrStat, ErrMsg, SrcDisp
    ! local variables
    INTEGER(IntKi)                          :: ErrStat2
    CHARACTER(ErrMsgLen)                    :: ErrMsg2
+   CHARACTER(*), PARAMETER                 :: RoutineName = 'Transfer_Point_to_Point'
    
    REAL(ReKi)                              :: LoadsScaleFactor  ! bjj: added this scaling factor to get loads in a better numerical range 
 
@@ -1325,12 +1344,12 @@ SUBROUTINE Transfer_Point_to_Point( Src, Dest, MeshMap, ErrStat, ErrMsg, SrcDisp
    !.................
 
    if (Src%ElemTable(ELEMENT_POINT)%nelem .eq. 0) then
-      CALL SetErrStat( ErrID_Fatal, 'Source mesh must have one or more Point elements.', ErrStat, ErrMsg, 'Transfer_Point_to_Point')
+      CALL SetErrStat( ErrID_Fatal, 'Source mesh must have one or more Point elements.', ErrStat, ErrMsg, RoutineName)
       RETURN
    endif
 
    if (Dest%ElemTable(ELEMENT_POINT)%nelem .eq. 0) then
-      CALL SetErrStat( ErrID_Fatal, 'Destination mesh must have one or more Point elements.', ErrStat, ErrMsg, 'Transfer_Point_to_Point')
+      CALL SetErrStat( ErrID_Fatal, 'Destination mesh must have one or more Point elements.', ErrStat, ErrMsg, RoutineName)
       RETURN
    endif
 
@@ -1351,7 +1370,7 @@ SUBROUTINE Transfer_Point_to_Point( Src, Dest, MeshMap, ErrStat, ErrMsg, SrcDisp
       if (Src%RemapFlag .or. Dest%RemapFlag ) then
 
          CALL CreateMotionMap_P_to_P( Src, Dest, MeshMap, ErrStat2, ErrMsg2 )
-            CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Transfer_Point_to_Point')
+            CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
             IF (ErrStat >= AbortErrLev) RETURN
             
       end if
@@ -1361,7 +1380,7 @@ SUBROUTINE Transfer_Point_to_Point( Src, Dest, MeshMap, ErrStat, ErrMsg, SrcDisp
       !........................
 
       CALL Transfer_Motions_Point_to_Point( Src, Dest, MeshMap, ErrStat2, ErrMsg2 )
-         CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Transfer_Point_to_Point')
+         CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
          IF (ErrStat >= AbortErrLev) RETURN
 
    end if ! algorithm for motions/scalars
@@ -1395,11 +1414,11 @@ SUBROUTINE Transfer_Point_to_Point( Src, Dest, MeshMap, ErrStat, ErrMsg, SrcDisp
          LoadsScaleFactor = GetLoadsScaleFactor ( Src )
          
          CALL Transfer_Loads_Point_to_Point( Src, Dest, MeshMap, ErrStat2, ErrMsg2, SrcDisp, DestDisp, LoadsScaleFactor )
-            CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Transfer_Point_to_Point')
+            CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
             IF (ErrStat >= AbortErrLev) RETURN                        
             
       ELSE !bjj: we could check if Src also had TranslationDisp fields and call with SrcDisp=Src
-         CALL SetErrStat( ErrID_Fatal, 'Invalid arguments to Transfer_Point_to_Point for meshes with load fields.', ErrStat, ErrMsg, 'Transfer_Point_to_Point')
+         CALL SetErrStat( ErrID_Fatal, 'Invalid arguments to Transfer_Point_to_Point for meshes with load fields.', ErrStat, ErrMsg, RoutineName)
          RETURN
       END IF
 
@@ -1451,7 +1470,10 @@ SUBROUTINE CreateMapping_NearestNeighbor( Mesh1, Mesh2, Map, Mesh1_TYPE, Mesh2_T
    end do
 
    ! Map the source nodes to destination nodes:
-   Map(:)%OtherMesh_Element = NODE_NOT_MAPPED ! initialize this so we know if we've mapped this node already (done only because we may have different elements)
+   do i=1,size(Map)
+      Map(i)%OtherMesh_Element = NODE_NOT_MAPPED ! initialize this so we know if we've mapped this node already (done only because we may have different elements)
+   end do !n1
+   
 
    do iElem = 1, Mesh1%ElemTable(Mesh1_TYPE)%nelem   ! number of Mesh1_TYPE elements on Mesh1 = number of points on Mesh1
       do iNode = 1, SIZE( Mesh1%ElemTable(Mesh1_TYPE)%Elements(iElem)%ElemNodes )
@@ -1522,7 +1544,7 @@ SUBROUTINE Transfer_Motions_Point_to_Point( Src, Dest, MeshMap, ErrStat, ErrMsg 
 
       ! local variables
    INTEGER(IntKi)  :: i, j                                     ! counter over the nodes
-   REAL(ReKi)      :: RotationMatrix(3,3)
+   REAL(R8Ki)      :: RotationMatrix(3,3)
    REAL(ReKi)      :: TmpVec(3)
 
 
@@ -1682,7 +1704,7 @@ SUBROUTINE Transfer_Loads_Point_to_Point( Src, Dest, MeshMap, ErrStat, ErrMsg, S
    CHARACTER(*),                   INTENT(  OUT)  :: ErrMsg     ! Error message if ErrStat /= ErrID_None
 
       ! local variables
-!   REAL(ReKi)                                     :: RotationMatrix(3,3)
+!   REAL(R8Ki)                                     :: RotationMatrix(3,3)
    REAL(ReKi)                                     :: torque(3), DisplacedPosition(3)
    INTEGER(IntKi)                                 :: i         ! counter over the nodes
 
@@ -1826,7 +1848,7 @@ SUBROUTINE CreateMotionMap_P_to_P( Src, Dest, MeshMap, ErrStat, ErrMsg )
             
       ! bjj: for consistant definition of couple_arm (i.e. p_ODR-p_OSR), let's multiply by -1
       do i=1,SIZE(MeshMap%MapMotions)
-         MeshMap%MapMotions(i)%couple_arm = -1._ReKi*MeshMap%MapMotions(i)%couple_arm
+         MeshMap%MapMotions(i)%couple_arm = -1.0_ReKi*MeshMap%MapMotions(i)%couple_arm
       end do
                      
 END SUBROUTINE CreateMotionMap_P_to_P        
@@ -1850,7 +1872,7 @@ SUBROUTINE Transfer_Line2_to_Line2( Src, Dest, MeshMap, ErrStat, ErrMsg, SrcDisp
    REAL(ReKi)                            :: LoadsScaleFactor  ! Scaling factor for loads (to help with numerical issues)
    INTEGER(IntKi)                        :: ErrStat2
    CHARACTER(ErrMsgLen)                  :: ErrMsg2
-      
+   CHARACTER(*), PARAMETER               :: RoutineName = 'Transfer_Line2_to_Line2'   
    
    ErrStat = ErrID_None
    ErrMsg  = ''
@@ -1859,12 +1881,12 @@ SUBROUTINE Transfer_Line2_to_Line2( Src, Dest, MeshMap, ErrStat, ErrMsg, SrcDisp
    ! Check to ensure that both the source and destination meshes are composed of Line2 elements
    !.................   
    if (Src%ElemTable(ELEMENT_LINE2)%nelem .eq. 0) then
-      CALL SetErrStat( ErrID_Fatal, 'Source mesh must have one or more Line2 elements.', ErrStat, ErrMsg, 'Transfer_Line2_to_Line2')
+      CALL SetErrStat( ErrID_Fatal, 'Source mesh must have one or more Line2 elements.', ErrStat, ErrMsg, RoutineName)
       RETURN
    endif
 
    if (Dest%ElemTable(ELEMENT_LINE2)%nelem .eq. 0) then
-      CALL SetErrStat( ErrID_Fatal, 'Destination mesh must have one or more Line2 elements.', ErrStat, ErrMsg, 'Transfer_Line2_to_Line2')
+      CALL SetErrStat( ErrID_Fatal, 'Destination mesh must have one or more Line2 elements.', ErrStat, ErrMsg, RoutineName)
       RETURN
    endif
    
@@ -1882,7 +1904,7 @@ SUBROUTINE Transfer_Line2_to_Line2( Src, Dest, MeshMap, ErrStat, ErrMsg, SrcDisp
       if (Src%RemapFlag .or. Dest%RemapFlag ) then
 
          CALL CreateMotionMap_L2_to_L2( Src, Dest, MeshMap, ErrStat2, ErrMsg2 )
-            CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Transfer_Line2_to_Line2')
+            CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
             IF (ErrStat >= AbortErrLev) RETURN
 
       endif !remapping
@@ -1892,7 +1914,7 @@ SUBROUTINE Transfer_Line2_to_Line2( Src, Dest, MeshMap, ErrStat, ErrMsg, SrcDisp
       !........................
          
       CALL Transfer_Motions_Line2_to_Point( Src, Dest, MeshMap, ErrStat2, ErrMsg2 )
-         CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Transfer_Line2_to_Line2')
+         CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
          IF (ErrStat >= AbortErrLev) RETURN
 
    endif !algorithm for motions/scalars
@@ -1904,7 +1926,7 @@ SUBROUTINE Transfer_Line2_to_Line2( Src, Dest, MeshMap, ErrStat, ErrMsg, SrcDisp
    if ( HasLoadFields(Src) ) then
 
       IF (.not. PRESENT(SrcDisp) .OR. .NOT. PRESENT(DestDisp) ) THEN
-         CALL SetErrStat( ErrID_Fatal, 'SrcDisp and DestDisp arguments are required for load transfer.', ErrStat, ErrMsg, 'Transfer_Line2_to_Line2')
+         CALL SetErrStat( ErrID_Fatal, 'SrcDisp and DestDisp arguments are required for load transfer.', ErrStat, ErrMsg, RoutineName)
          RETURN
       END IF
             
@@ -1920,7 +1942,7 @@ SUBROUTINE Transfer_Line2_to_Line2( Src, Dest, MeshMap, ErrStat, ErrMsg, SrcDisp
       if (Src%RemapFlag .or. Dest%RemapFlag ) then
                   
          CALL CreateLoadMap_L2_to_L2( Src, Dest, MeshMap, ErrStat2, ErrMsg2 )
-            CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Transfer_Line2_to_Line2')
+            CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
             IF (ErrStat >= AbortErrLev) RETURN         
             
       end if
@@ -1934,16 +1956,16 @@ SUBROUTINE Transfer_Line2_to_Line2( Src, Dest, MeshMap, ErrStat, ErrMsg, SrcDisp
       ! first, we take the source fields and transfer them to fields on the augmented source mesh:
       !  (we're also taking the SrcDisp field and putting it on our augmented mesh)
       CALL Transfer_Src_To_Augmented_Ln2_Src( Src, MeshMap, ErrStat2, ErrMsg2, SrcDisp, LoadsScaleFactor ) 
-         CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Transfer_Line2_to_Line2')
+         CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
          IF (ErrStat >= AbortErrLev) RETURN
       
       ! then we lump the loads from the augmented source mesh:
       CALL Lump_Line2_to_Point( MeshMap%Augmented_Ln2_Src,  MeshMap%Lumped_Points_Src,  ErrStat2, ErrMsg2, LoadsScaleFactor=LoadsScaleFactor  ) 
-         CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Transfer_Line2_to_Line2')
+         CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
          IF (ErrStat >= AbortErrLev) RETURN
       
       CALL Transfer_Loads_Point_to_Line2( MeshMap%Lumped_Points_Src, Dest, MeshMap, ErrStat2, ErrMsg2, MeshMap%Augmented_Ln2_Src, DestDisp, LoadsScaleFactor )
-         CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Transfer_Line2_to_Line2')
+         CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
          IF (ErrStat >= AbortErrLev) RETURN
 
 
@@ -2204,7 +2226,8 @@ SUBROUTINE Create_Augmented_Ln2_Src_Mesh(Src, Dest, MeshMap, Dest_TYPE, ErrStat,
    INTEGER(IntKi)                                 :: Aug_NElem, curr_Aug_NElem
    INTEGER(IntKi)                                 :: n, n1, n2
    REAL(ReKi)                                     :: p_ED(3), p_ES(3), n1S_nD_vector(3), position(3)
-   REAL(ReKi)                                     :: TmpVec(3), RefOrientation(3,3), FieldValue(3,2)   ! values for interpolating direction cosine matrices
+   REAL(R8Ki)                                     :: RefOrientation(3,3)
+   REAL(DbKi)                                     :: TmpVec(3), RefOrientationD(3,3), FieldValue(3,2)   ! values for interpolating direction cosine matrices
    REAL(ReKi)                                     :: denom, elem_position
    REAL(ReKi), PARAMETER                          :: TOL = sqrt(epsilon(elem_position))  ! we're not using EqualRealNos here because we don't want elements of zero length (EqualRealNos produces elements of zero length)
    REAL(ReKi)                                     :: L         ! length of newly created element(s)
@@ -2217,6 +2240,7 @@ SUBROUTINE Create_Augmented_Ln2_Src_Mesh(Src, Dest, MeshMap, Dest_TYPE, ErrStat,
    
    INTEGER(IntKi)                                 :: ErrStat2
    CHARACTER(ErrMsgLen)                           :: ErrMsg2
+   CHARACTER(*), PARAMETER                        :: RoutineName = 'Create_Augmented_Ln2_Src_Mesh'
    
    
    
@@ -2240,7 +2264,7 @@ SUBROUTINE Create_Augmented_Ln2_Src_Mesh(Src, Dest, MeshMap, Dest_TYPE, ErrStat,
                      ,ErrStat         = ErrStat2                     &
                      ,ErrMess         = ErrMsg2                      )  
    
-      CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Create_Augmented_Ln2_Src_Mesh')
+      CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
       IF (ErrStat >= AbortErrLev) THEN
          CALL CleanUp()
          RETURN      
@@ -2248,13 +2272,13 @@ SUBROUTINE Create_Augmented_Ln2_Src_Mesh(Src, Dest, MeshMap, Dest_TYPE, ErrStat,
    
    
    CALL AllocAry( Original_Src_Element, src%ElemTable(ELEMENT_LINE2)%nelem+max_new_nodes, 'Original_Src_Element', ErrStat2, ErrMsg2 )
-      CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Create_Augmented_Ln2_Src_Mesh')
+      CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
       IF (ErrStat >= AbortErrLev) THEN
          CALL CleanUp()
          RETURN      
       END IF
    CALL AllocAry( shape_fn2,            max_nodes, 'shape_fn2', ErrStat2, ErrMsg2 )
-      CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Create_Augmented_Ln2_Src_Mesh')
+      CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
       IF (ErrStat >= AbortErrLev) THEN
          CALL CleanUp()
          RETURN      
@@ -2271,7 +2295,7 @@ SUBROUTINE Create_Augmented_Ln2_Src_Mesh(Src, Dest, MeshMap, Dest_TYPE, ErrStat,
                               ,ErrStat   = ErrStat2               &
                               ,ErrMess   = ErrMsg2                 )      
 
-         CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Create_Augmented_Ln2_Src_Mesh')
+         CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
          IF (ErrStat >= AbortErrLev) THEN
             CALL CleanUp()
             RETURN      
@@ -2286,7 +2310,7 @@ SUBROUTINE Create_Augmented_Ln2_Src_Mesh(Src, Dest, MeshMap, Dest_TYPE, ErrStat,
                                  ,P2       = Src%ElemTable(ELEMENT_LINE2)%Elements(i)%ElemNodes(2)  &
                                  ,ErrStat  = ErrStat2            &
                                  ,ErrMess  = ErrMsg2             )
-         CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Create_Augmented_Ln2_Src_Mesh')
+         CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
          IF (ErrStat >= AbortErrLev) THEN
             CALL CleanUp()
             RETURN      
@@ -2377,7 +2401,7 @@ SUBROUTINE Create_Augmented_Ln2_Src_Mesh(Src, Dest, MeshMap, Dest_TYPE, ErrStat,
                            ! we can add the node (and an element)
                         Aug_NElem  = Aug_NElem + 1 
                         CALL MeshSplitElement_2PT( Temp_Ln2_Src, ELEMENT_LINE2, ErrStat2, ErrMsg2, iElem, Aug_Nnodes  )                      
-                           CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Create_Augmented_Ln2_Src_Mesh')
+                           CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
                            IF (ErrStat >= AbortErrLev) THEN
                               CALL CleanUp()
                               RETURN      
@@ -2398,20 +2422,26 @@ SUBROUTINE Create_Augmented_Ln2_Src_Mesh(Src, Dest, MeshMap, Dest_TYPE, ErrStat,
 #else
                         
                            ! convert DCMs to tensors: 
-                        CALL DCM_logmap( Src%RefOrientation(:, :, n1), FieldValue(:,1), ErrStat, ErrMsg )
-                        IF (ErrStat >= AbortErrLev) RETURN
+
+                           RefOrientationD = Src%RefOrientation(:, :, n1)
+                           CALL DCM_logmap( RefOrientationD, FieldValue(:,1), ErrStat, ErrMsg )
+                           IF (ErrStat >= AbortErrLev) RETURN
                   
-                        CALL DCM_logmap( Src%RefOrientation(:, :, n2), FieldValue(:,2), ErrStat, ErrMsg )                  
-                        IF (ErrStat >= AbortErrLev) RETURN
+                           RefOrientationD = Src%RefOrientation(:, :, n1)
+                           CALL DCM_logmap( RefOrientationD, FieldValue(:,2), ErrStat, ErrMsg )                  
+                           IF (ErrStat >= AbortErrLev) RETURN
          
-                        CALL DCM_SetLogMapForInterp( FieldValue )  ! make sure we don't cross a 2pi boundary
+                           CALL DCM_SetLogMapForInterp( FieldValue )  ! make sure we don't cross a 2pi boundary
                   
-                           ! interpolate tensors: 
-                        TmpVec = (1.0_ReKi - shape_fn2(Aug_Nnodes)) * FieldValue(:, 1) &
-                                           + shape_fn2(Aug_Nnodes)  * FieldValue(:, 2) 
+                              ! interpolate tensors: 
+                           TmpVec = (1.0_ReKi - shape_fn2(Aug_Nnodes)) * FieldValue(:, 1) &
+                                              + shape_fn2(Aug_Nnodes)  * FieldValue(:, 2) 
                               
-                           ! convert back to DCM:
-                        RefOrientation = DCM_exp( TmpVec )
+                              ! convert back to DCM:
+                           RefOrientationD = DCM_exp( TmpVec )
+                           RefOrientation  = REAL(RefOrientationD, ReKi)
+
+                        
 
 #endif
                         
@@ -2422,7 +2452,7 @@ SUBROUTINE Create_Augmented_Ln2_Src_Mesh(Src, Dest, MeshMap, Dest_TYPE, ErrStat,
                                                 ,Orient    = RefOrientation                    &
                                                 ,ErrStat   = ErrStat2                          &
                                                 ,ErrMess   = ErrMsg2                           )
-                           CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Create_Augmented_Ln2_Src_Mesh')
+                           CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
                            IF (ErrStat >= AbortErrLev) THEN
                               CALL CleanUp()
                               RETURN      
@@ -2459,7 +2489,7 @@ SUBROUTINE Create_Augmented_Ln2_Src_Mesh(Src, Dest, MeshMap, Dest_TYPE, ErrStat,
    !.................
    
    CALL MeshDestroy( MeshMap%Augmented_Ln2_Src, ErrStat2, ErrMsg2, .TRUE. )
-      CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Create_Augmented_Ln2_Src_Mesh')
+      CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
       IF (ErrStat >= AbortErrLev) THEN
          CALL CleanUp()
          RETURN      
@@ -2475,7 +2505,7 @@ SUBROUTINE Create_Augmented_Ln2_Src_Mesh(Src, Dest, MeshMap, Dest_TYPE, ErrStat,
                      ,ErrStat         = ErrStat2                               &
                      ,ErrMess         = ErrMsg2                                )
 
-      CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Create_Augmented_Ln2_Src_Mesh')
+      CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
       IF (ErrStat >= AbortErrLev) THEN
          CALL CleanUp()
          RETURN      
@@ -2489,7 +2519,7 @@ SUBROUTINE Create_Augmented_Ln2_Src_Mesh(Src, Dest, MeshMap, Dest_TYPE, ErrStat,
                               ,Orient = Temp_Ln2_Src%RefOrientation(:,:,i)    &
                               ,ErrStat   = ErrStat2                           &
                               ,ErrMess   = ErrMsg2                            )      
-         CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Create_Augmented_Ln2_Src_Mesh')
+         CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
          IF (ErrStat >= AbortErrLev) THEN
             CALL CleanUp()
             RETURN      
@@ -2503,7 +2533,7 @@ SUBROUTINE Create_Augmented_Ln2_Src_Mesh(Src, Dest, MeshMap, Dest_TYPE, ErrStat,
                                  ,P2       = Temp_Ln2_Src%ElemTable(ELEMENT_LINE2)%Elements(i)%ElemNodes(2)  &
                                  ,ErrStat  = ErrStat2                                                        &
                                  ,ErrMess  = ErrMsg2                                                         )
-         CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Create_Augmented_Ln2_Src_Mesh')
+         CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
          IF (ErrStat >= AbortErrLev) THEN
             CALL CleanUp()
             RETURN      
@@ -2511,7 +2541,7 @@ SUBROUTINE Create_Augmented_Ln2_Src_Mesh(Src, Dest, MeshMap, Dest_TYPE, ErrStat,
    end do   
    
    CALL MeshCommit ( MeshMap%Augmented_Ln2_Src, ErrStat2, ErrMsg2 )
-      CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Create_Augmented_Ln2_Src_Mesh')
+      CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
       IF (ErrStat >= AbortErrLev) THEN
          CALL CleanUp()
          RETURN      
@@ -2530,17 +2560,19 @@ SUBROUTINE Create_Augmented_Ln2_Src_Mesh(Src, Dest, MeshMap, Dest_TYPE, ErrStat,
          ALLOCATE( MeshMap%MapSrcToAugmt((Src%Nnodes+1):Aug_NNodes), STAT=ErrStat2 ) 
          
          IF (ErrStat2 /= 0) THEN
-            CALL SetErrStat( ErrID_Fatal, 'Could not allocate MeshMap%MapSrcToAugmt.', ErrStat, ErrMsg, 'Create_Augmented_Ln2_Src_Mesh')
+            CALL SetErrStat( ErrID_Fatal, 'Could not allocate MeshMap%MapSrcToAugmt.', ErrStat, ErrMsg, RoutineName)
             CALL CleanUp()
             RETURN      
          END IF
       END IF
-   
-      MeshMap%MapSrcToAugmt%OtherMesh_Element = -1
-      MeshMap%MapSrcToAugmt(:)%OtherMesh_Element = Original_Src_Element( (Src%ElemTable(ELEMENT_LINE2)%nelem+1) : Aug_NElem ) ! we added just as many nodes as elements...
-      MeshMap%MapSrcToAugmt(:)%shape_fn(2)       = shape_fn2( (Src%nnodes+1) : Aug_Nnodes )
-      MeshMap%MapSrcToAugmt(:)%shape_fn(1)       = 1.0_ReKi - MeshMap%MapSrcToAugmt(:)%shape_fn(2)
-      
+         
+      j=Src%ElemTable(ELEMENT_LINE2)%nelem 
+      do i=LBOUND(MeshMap%MapSrcToAugmt,1),UBOUND(MeshMap%MapSrcToAugmt,1)
+         j = j+1
+         MeshMap%MapSrcToAugmt(i)%OtherMesh_Element = Original_Src_Element( j ) ! we added just as many nodes as elements...
+         MeshMap%MapSrcToAugmt(i)%shape_fn(2)       = shape_fn2( i )
+         MeshMap%MapSrcToAugmt(i)%shape_fn(1)       = 1.0_ReKi - shape_fn2( i )
+      end do
             
       IF (ALLOCATED(MeshMap%DisplacedPosition)) THEN
          IF ( SIZE(MeshMap%DisplacedPosition,2) < Aug_Nnodes )  THEN
@@ -2551,7 +2583,7 @@ SUBROUTINE Create_Augmented_Ln2_Src_Mesh(Src, Dest, MeshMap, Dest_TYPE, ErrStat,
       
       IF (.NOT. ALLOCATED(MeshMap%DisplacedPosition)) THEN            
          CALL AllocAry( MeshMap%DisplacedPosition, 3, Aug_Nnodes,2, 'MeshMap%DisplacedPosition', ErrStat2, ErrMsg2)               
-            CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'Create_Augmented_Ln2_Src_Mesh')
+            CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
             IF (ErrStat >= AbortErrLev) THEN
                CALL CleanUp()
                RETURN      
@@ -2568,7 +2600,7 @@ SUBROUTINE Create_Augmented_Ln2_Src_Mesh(Src, Dest, MeshMap, Dest_TYPE, ErrStat,
       IF (.NOT. ALLOCATED(MeshMap%MapLoads)) THEN            
          ALLOCATE( MeshMap%MapLoads(Aug_Nnodes), STAT=ErrStat2 )
          IF (ErrStat2 /= 0) THEN
-            CALL SetErrStat( ErrID_Fatal, 'Could not allocate MeshMap%MapLoads.', ErrStat, ErrMsg, 'Create_Augmented_Ln2_Src_Mesh')
+            CALL SetErrStat( ErrID_Fatal, 'Could not allocate MeshMap%MapLoads.', ErrStat, ErrMsg, RoutineName)
             CALL CleanUp()
             RETURN      
          END IF      
