@@ -1,0 +1,30 @@
+                           MoorDyn F Change Log
+==========================================================================
+
+Listing changes since version v1.00.00F
+--------------------------------------------------------------------------
+
+
+
+             (Skipping v1.00.01F to keep up with MoorDyn C)
+
+
+--------------------------------------------------------------------------
+               MoorDyn v1.00.02F - 24 Nov. 2015 - Matt Hall
+--------------------------------------------------------------------------
+
+- fixed indexing error that would case program crash with multi-segmented 
+  moorings
+  
+- made bottom contact general so that fairlead and anchor ends experiencing 
+  bottom contact will not cause problems
+  
+- added checking for NaNs in state vector
+
+- fixed error in connect drag calculation (was previously using position 
+  rather than velocity!)
+  
+- added functionality for outputting individual connection X,Y,Z force 
+  components (previously gave 0)
+  
+- added more helpful handling of errors in requested output channel names

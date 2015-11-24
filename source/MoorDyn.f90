@@ -27,7 +27,7 @@ MODULE MoorDyn
 
    PRIVATE
 
-   TYPE(ProgDesc), PARAMETER            :: MD_ProgDesc = ProgDesc( 'MoorDyn', 'v1.00.00F-mth', '30-Sep-2015' )
+   TYPE(ProgDesc), PARAMETER            :: MD_ProgDesc = ProgDesc( 'MoorDyn', 'v1.00.02F-mth', '24-Nov-2015' )
 
 
    PUBLIC :: MD_Init
@@ -402,7 +402,8 @@ CONTAINS
 
          ! integrate the EOMs one DTIC s time step
          CALL TimeStep ( t, InitInp%DTIC, uArray, utimes, p, x, xd, z, other, ErrStat, ErrMsg )
-
+            CALL CheckError( ErrStat2, ErrMsg2 )
+            IF (ErrStat >= AbortErrLev) RETURN
 
          ! store new fairlead tension (and previous fairlead tensions for comparison)
          DO J = 1, p%NFairs
@@ -466,17 +467,21 @@ CONTAINS
          ! Set error status/message;
          IF ( ErrID /= ErrID_None ) THEN
 
-            IF (ErrStat /= ErrID_None) ErrMsg = TRIM(ErrMsg)//NewLine
+            IF (ErrStat /= ErrID_None) ErrMsg = TRIM(ErrMsg)//NewLine   ! if there's a pre-existing warning/error, retain the message and start a new line
+
             ErrMsg = TRIM(ErrMsg)//' MD_Init:'//TRIM(Msg)
             ErrStat = MAX(ErrStat, ErrID)
 
             ! Clean up if we're going to return on error: close files, deallocate local arrays
-            ! <<< still need to do this!
 
-     !      IF ( ErrStat >= AbortErrLev ) THEN
-      !         CALL SrvD_DestroyInputFile(InputFileData, ErrStat3, ErrMsg3 )
-      !      END IF
 
+            IF ( ErrStat >= AbortErrLev ) THEN                
+               IF (ALLOCATED(other%FairIdList       ))  DEALLOCATE(other%FairIdList       )
+               IF (ALLOCATED(other%ConnIdList       ))  DEALLOCATE(other%ConnIdList       )
+               IF (ALLOCATED(other%LineStateIndList ))  DEALLOCATE(other%LineStateIndList )
+               IF (ALLOCATED(x%states               ))  DEALLOCATE(x%states               )
+               IF (ALLOCATED(FairTensIC             ))  DEALLOCATE(FairTensIC             ) 
+            END IF
          END IF
 
       END SUBROUTINE CheckError
@@ -943,14 +948,18 @@ CONTAINS
 
             ! F-K force from fluid acceleration not implemented yet
 
-            ! bottom contact (stiffness and damping)
+            ! bottom contact (stiffness and damping, vertical-only for now)  - updated Nov 24 for general case where anchor and fairlead ends may deal with bottom contact forces
+
             IF (Line%r(3,I) < -p%WtrDpth) THEN
-               IF (I>0) THEN
-                  Line%B(3,I) = ( (-p%WtrDpth - Line%r(3,I))*p%kBot - Line%rd(3,I)*p%cBot) * 0.5*d*(Line%l(I) + Line%l(I+1) ) ! vertical only for now
+               IF (I==0) THEN
+                  Line%B(3,I) = ( (-p%WtrDpth - Line%r(3,I))*p%kBot - Line%rd(3,I)*p%cBot) * 0.5*d*(            Line%l(I+1) ) 
+               ELSE IF (I==N) THEN
+                  Line%B(3,I) = ( (-p%WtrDpth - Line%r(3,I))*p%kBot - Line%rd(3,I)*p%cBot) * 0.5*d*(Line%l(I)               ) 
                ELSE
-                  ErrStat = ErrID_Fatal
-                  ErrMsg = ' Anchor node is lower than the seafloor (z < -WtrDpth)'
-                  ! need to add error handling to these functions...
+                  Line%B(3,I) = ( (-p%WtrDpth - Line%r(3,I))*p%kBot - Line%rd(3,I)*p%cBot) * 0.5*d*(Line%l(I) + Line%l(I+1) ) 
+
+
+
                END IF
             ELSE
                Line%B(3,I) = 0.0_ReKi
@@ -1017,7 +1026,7 @@ CONTAINS
          Type(MD_Connect), INTENT (INOUT)  :: Connect        ! Connect number
 
 
-         INTEGER(IntKi)             :: I         ! index of segments or nodes along line
+         !INTEGER(IntKi)             :: I         ! index of segments or nodes along line
          INTEGER(IntKi)             :: J         ! index
          INTEGER(IntKi)             :: K         ! index
          Real(ReKi)                 :: Sum1      ! for adding things
@@ -1031,8 +1040,8 @@ CONTAINS
          IF (EqualRealNos(t, 0.0_ReKi)) THEN  ! this is old: with current IC gen approach, we skip the first call to the line objects, because they're set AFTER the call to the connects
 
             DO J = 1,3
-               Xd(3+I) = X(I)        ! velocities - these are unused in integration
-               Xd(I) = 0.0_ReKi           ! accelerations - these are unused in integration
+               Xd(3+J) = X(J)        ! velocities - these are unused in integration
+               Xd(J) = 0.0_ReKi           ! accelerations - these are unused in integration
             END DO
          ELSE
             ! from state values, get r and rdot values
@@ -1041,11 +1050,12 @@ CONTAINS
                Connect%rd(J) = X(J)       ! get velocities
             END DO
          END IF
+         
 
          ! add any added mass and drag forces from the Connect body itself
          DO J = 1,3
-            Connect%Ftot(J) = Connect%Ftot(J) - 0.5 * p%rhoW * Connect%r(J) * abs(Connect%r(J)) * Connect%conCdA;  ! add drag forces
-            Connect%Mtot(J,J) = Connect%Mtot(J,J) + Connect%conV*p%rhoW*Connect%conCa;                             ! add added mass
+            Connect%Ftot(J) = Connect%Ftot(J) - 0.5 * p%rhoW * Connect%rd(J) * abs(Connect%rd(J)) * Connect%conCdA;  ! add drag forces - corrected Nov 24
+            Connect%Mtot(J,J) = Connect%Mtot(J,J) + Connect%conV*p%rhoW*Connect%conCa;                               ! add added mass
          END DO
                      
          ! invert node mass matrix
@@ -1060,7 +1070,7 @@ CONTAINS
 
             ! update states
             Xd(3 + J) = X(J)          ! dxdt = V    (velocities)
-            Xd(I) = Sum1              ! dVdt = RHS * A  (accelerations)
+            Xd(J) = Sum1              ! dVdt = RHS * A  (accelerations)
          END DO
 
       END SUBROUTINE DoConnectRHS
@@ -1259,6 +1269,15 @@ CONTAINS
       END IF
       !   CALL SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'MD_UpdateStates')
 
+      
+      ! check for NaNs - is this a good place/way to do it?
+      DO J = 1, Nx
+         IF (Is_NaN(DBLE(x%states(J)))) THEN
+            ErrStat = ErrID_Fatal
+            ErrMsg = ' NaN state detected.'
+         END IF
+      END DO
+ 
 
    END SUBROUTINE TimeStep
    !======================================================================

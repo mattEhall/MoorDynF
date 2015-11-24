@@ -378,7 +378,7 @@ CONTAINS
        IF ( ErrStat2 /= 0 ) THEN
           CALL WrScr('   Unable to parse Connection '//trim(Num2LStr(I))//' row in input file.')  ! Specific screen output because errors likely
           CALL WrScr('   Ensure row has all 12 columns, including CdA and Ca.')           ! to be caused by non-updated input file formats.
-             CALL SetErrStat( ErrID_Fatal, 'Failed to read connects.' , ErrStat, ErrMsg, RoutineName ) ! would be nice to specify which line
+             CALL SetErrStat( ErrID_Fatal, 'Failed to read connects.' , ErrStat, ErrMsg, RoutineName ) ! would be nice to specify which line <<<<<<<<<
           CALL CleanUp()
           RETURN
        END IF
@@ -497,7 +497,7 @@ CONTAINS
    
        ! check errors
        IF ( ErrStat /= ErrID_None ) THEN
-          ErrMsg  = ' Failed to read line data for Line '//trim(Num2LStr(I))  ! would be nice to specify which line
+          ErrMsg  = ' Failed to read line data for Line '//trim(Num2LStr(I))
           CALL CleanUp()
           RETURN
        END IF
@@ -697,9 +697,9 @@ CONTAINS
 
       ! error check
       IF (i1 <= 1) THEN
-        CALL DenoteInvalidOutput(p%OutParam(I)) ! flag as invalid
-        CALL WrScr('Warning: invalid output specifier.')
-        CONTINUE
+         CALL DenoteInvalidOutput(p%OutParam(I)) ! flag as invalid
+         CALL WrScr('Warning: invalid output specifier '//trim(OutListTmp)//'.  Starting character must be C or L.')
+         CYCLE    ! <<<<<<<<<<< check correct usage
       END IF
 
         p%OutParam(I)%Name = OutListTmp  ! label channel with whatever name was inputted, for now
@@ -746,8 +746,8 @@ CONTAINS
         ! error
         ELSE
           CALL DenoteInvalidOutput(p%OutParam(I)) ! flag as invalid
-          CALL WrScr('Warning: invalid output specifier - type must be L or C.')
-          CONTINUE
+          CALL WrScr('Warning: invalid output specifier '//trim(OutListTmp)//'.  Type must be L or C.')
+          CYCLE
         END IF
 
         ! object number
@@ -776,7 +776,7 @@ CONTAINS
         ELSE IF (qVal == 'AX') THEN
           p%OutParam(I)%QType = AccX
           p%OutParam(I)%Units = UnitList(AccX)
-        ELSE IF (qVal == 'Ay') THEN
+        ELSE IF (qVal == 'AY') THEN   ! fixed typo Nov 24
           p%OutParam(I)%QType = AccY
           p%OutParam(I)%Units = UnitList(AccY)
         ELSE IF (qVal == 'AZ') THEN
@@ -796,7 +796,7 @@ CONTAINS
           p%OutParam(I)%Units = UnitList(FZ)
         ELSE
           CALL DenoteInvalidOutput(p%OutParam(I)) ! flag as invalid
-          CALL WrScr('Warning: invalid output specifier - quantity type not recognized.')  ! need to figure out how to add numbers/strings to these warning messages...
+          CALL WrScr('Warning: invalid output specifier '//trim(OutListTmp)//'.  Quantity type not recognized.')
           CONTINUE
         END IF
 
@@ -805,19 +805,19 @@ CONTAINS
       ! also check whether each object index and node index (if applicable) is in range
       IF (p%OutParam(I)%OType==2) THEN
         IF (p%OutParam(I)%ObjID > p%NConnects) THEN
-          call wrscr('warning, output Connect index excedes number of Connects')
+          CALL WrScr('Warning: output Connect index excedes number of Connects in requested output '//trim(OutListTmp)//'.')
           CALL DenoteInvalidOutput(p%OutParam(I)) ! flag as invalid
         END IF
       ELSE IF (p%OutParam(I)%OType==1) THEN
         IF (p%OutParam(I)%ObjID > p%NLines) THEN
-          call wrscr('warning, output Line index excedes number of Line')
+          CALL WrScr('Warning: output Line index excedes number of Lines in requested output '//trim(OutListTmp)//'.')
           CALL DenoteInvalidOutput(p%OutParam(I)) ! flag as invalid
         END IF
         IF (p%OutParam(I)%NodeID > other%LineList(p%OutParam(I)%ObjID)%N) THEN
-          call wrscr('warning, output node index excedes number of nodes')
+          CALL WrScr('Warning: output node index excedes number of nodes in requested output '//trim(OutListTmp)//'.')
           CALL DenoteInvalidOutput(p%OutParam(I)) ! flag as invalid
         ELSE IF (p%OutParam(I)%NodeID < 0) THEN
-          call wrscr('warning, output node index is less than zero')
+          CALL WrScr('Warning: output node index is less than zero in requested output '//trim(OutListTmp)//'.')
           CALL DenoteInvalidOutput(p%OutParam(I)) ! flag as invalid
         END IF
 
@@ -950,9 +950,9 @@ CONTAINS
 
          WRITE(p%MDUnOut,Frmt)  TRIM( '(s)' ), ( p%Delim, TRIM( p%OutParam(I)%Units ), I=1,p%NumOuts )
 
-      ELSE  ! if no outputs requested
+ !     ELSE  ! if no outputs requested
 
-         call wrscr('note, MDIO_OpenOutput thinks that no outputs have been requested.')
+ !        call wrscr('note, MDIO_OpenOutput thinks that no outputs have been requested.')
 
       END IF
 
@@ -1165,10 +1165,16 @@ CONTAINS
                   y%WriteOutput(I) = other%ConnectList(p%OutParam(I)%ObjID)%rd(3) ! z velocity
                CASE (Ten)
                   y%WriteOutput(I) = TwoNorm(other%ConnectList(p%OutParam(I)%ObjID)%Ftot)  ! total force magnitude on a connect (used eg. for fairlead and anchor tensions)
+               CASE (FX)
+                  y%WriteOutput(I) = other%ConnectList(p%OutParam(I)%ObjID)%Ftot(1)  ! total force in x - added Nov 24
+               CASE (FY)
+                  y%WriteOutput(I) = other%ConnectList(p%OutParam(I)%ObjID)%Ftot(2)  ! total force in y
+               CASE (FZ)
+                  y%WriteOutput(I) = other%ConnectList(p%OutParam(I)%ObjID)%Ftot(3)  ! total force in z
                CASE DEFAULT
                   y%WriteOutput(I) = 0.0_ReKi
                   ErrStat = ErrID_Warn
-                  ErrMsg = ' Unsupported output quantity from Connect object requested.'
+                  ErrMsg = ' Unsupported output quantity '//TRIM(Num2Lstr(p%OutParam(I)%QType))//' requested from Connection '//TRIM(Num2Lstr(p%OutParam(I)%ObjID))//'.'
             END SELECT
 
          ELSE IF (p%OutParam(I)%OType == 1) THEN  ! if dealing with a Line output
@@ -1191,7 +1197,7 @@ CONTAINS
                CASE DEFAULT
                  y%WriteOutput(I) = 0.0_ReKi
                  ErrStat = ErrID_Warn
-                 ErrMsg = ' Unsupported output quantity from Line object requested.'
+                 ErrMsg = ' Unsupported output quantity '//TRIM(Num2Lstr(p%OutParam(I)%QType))//' requested from Line '//TRIM(Num2Lstr(p%OutParam(I)%ObjID))//'.'
             END SELECT
 
          ELSE  ! it must be an invalid output, so write zero

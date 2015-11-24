@@ -1,8 +1,16 @@
-MoorDyn is a lumped-mass mooring line model for simulating the dynamics of moorings connected to floating offshore structures.  It accounts for internal axial stiffness and damping forces, weight and buoyancy forces, hydrodynamic forces from Morison's equation (assuming quiescent water), and vertical spring-damper forces from contact with the seabed.  MoorDyn's input file format is based on that of MAP.  The model supports arbitrary line interconnections, clump weights and floats, and different line properties.  
+*Lumped-mass mooring dynamics*
 
-Author: [Matthew Hall](mailto:matthew.hall@umit.maine.edu)
+**by [Matthew Hall](mailto:matthew.hall@umit.maine.edu)**
+External contributor - University of Maine
 
-Two versions of MoorDyn exist: the Fortran FAST v8 module hosted on this page, and a C++ implementation designed for easy coupling with models (in C, Fortran, Matlab/Simulink, etc.).  The latter version is hosted at <http://www.matt-hall.ca/software/MoorDyn>.
+
+MoorDyn is a lumped-mass mooring line model for simulating the dynamics of moorings connected to floating offshore structures.  It accounts for internal axial stiffness and damping forces, weight and buoyancy forces, hydrodynamic forces from Morison's equation (assuming quiescent water so far), and vertical spring-damper forces from contact with the seabed.  MoorDyn's input file format is based on that of [MAP](https://nwtc.nrel.gov/MAP).  The model supports arbitrary line interconnections, clump weights and floats, and different line properties.  
+
+This page hosts the Fortran version of MoorDyn, which has been developed as a [FAST v8](https://nwtc.nrel.gov/FAST8) module following the FAST Modularization Framework.
+
+For the C++ incarnation of MoorDyn, see <http://www.matt-hall.ca/MoorDyn>.  "MoorDyn C" can be compiled as a Windows DLL and features simpler functions that allow for easy coupling with other tools or scripts coded in C/C++, Fortran, Matlab/Simulink, etc.  It has recently been integrated into [WEC-Sim](https://nwtc.nrel.gov/WEC-Sim).
+
+Both forms of MoorDyn feature the same underlying mooring model, use similar input and output conventions, and are being updated and improved in parallel.  They follow the same version numbering, with a "C" or "F" suffix for differentiation.
 
 
 ## Documentation
@@ -14,5 +22,5 @@ More detail about the mooring line model and some validation against 1:50-scale 
 
 ## Prerequisites
 
-Designed as a FAST v8 module, MoorDyn (F) needs to be called by a master program that follows the FAST Modularization Framework, such as FAST v8, to drive its operation.  Compiling of this combined Fortran code requires a suitable compiler.
+MoorDyn F is included in FAST v8 and has the same requirements for compiling and running.  It can also be incorporated in other programs if they follow the conventions laid out in the [FAST Modularization Framework](https://nwtc.nrel.gov/FAST-Developers).
 
