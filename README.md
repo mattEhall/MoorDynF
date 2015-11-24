@@ -1,7 +1,6 @@
 *Lumped-mass mooring dynamics*
 
-**by [Matthew Hall](mailto:matthew.hall@umit.maine.edu)**
-
+**by [Matthew Hall](mailto:matthew.hall@umit.maine.edu)**  
 University of Maine
 
 
