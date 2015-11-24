@@ -1,7 +1,8 @@
 *Lumped-mass mooring dynamics*
 
 **by [Matthew Hall](mailto:matthew.hall@umit.maine.edu)**
-External contributor - University of Maine
+
+University of Maine
 
 
 MoorDyn is a lumped-mass mooring line model for simulating the dynamics of moorings connected to floating offshore structures.  It accounts for internal axial stiffness and damping forces, weight and buoyancy forces, hydrodynamic forces from Morison's equation (assuming quiescent water so far), and vertical spring-damper forces from contact with the seabed.  MoorDyn's input file format is based on that of [MAP](https://nwtc.nrel.gov/MAP).  The model supports arbitrary line interconnections, clump weights and floats, and different line properties.  
