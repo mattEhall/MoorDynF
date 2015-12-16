@@ -20,7 +20,7 @@ The [User's Guide](http://www.matt-hall.ca/wp-content/uploads/2014/11/MoorDyn-Us
 More detail about the mooring line model and some validation against 1:50-scale floating wind turbine test data is available in the paper [M. Hall and A. Goupee, “Validation of a lumped-mass mooring line model with DeepCwind semisubmersible model test data,” Ocean Engineering, vol. 104, pp. 590–603, Aug. 2015.](http://www.sciencedirect.com/science/article/pii/S0029801815002279)
 
 
-## Version 1.00.02F
+## Latest Version
 
 MoorDyn v1.00.02F (Nov. 24, 2015) provides an important bugfix and some minor improvements.  A critical error for multi-segmented cases has been resolved.  Cases in which line connections encounter the seabed are handled.  The calculation of drag forces on connection objects is corrected.  More output channels are implemented.  NaN states (instability) are detected.
 
