@@ -13,18 +13,28 @@ Listing changes since version v1.00.00F
                MoorDyn v1.00.02F - 24 Nov. 2015 - Matt Hall
 --------------------------------------------------------------------------
 
-- fixed indexing error that would case program crash with multi-segmented 
+- fixed indexing error that would case program crash with multi-segmented
   moorings
-  
-- made bottom contact general so that fairlead and anchor ends experiencing 
+
+- made bottom contact general so that fairlead and anchor ends experiencing
   bottom contact will not cause problems
-  
+
 - added checking for NaNs in state vector
 
-- fixed error in connect drag calculation (was previously using position 
+- fixed error in connect drag calculation (was previously using position
   rather than velocity!)
-  
-- added functionality for outputting individual connection X,Y,Z force 
+
+- added functionality for outputting individual connection X,Y,Z force
   components (previously gave 0)
-  
+
 - added more helpful handling of errors in requested output channel names
+
+--------------------------------------------------------------------------
+               MoorDyn v1.01.02F - 8 Apr. 2016 - Bonnie Jonkman
+--------------------------------------------------------------------------
+
+- updated FAST interfaces to include MiscVar type, a change to the FAST
+  Modular Framework
+
+- updated Catenary routine to initialize values for the horizontal and
+  vertical tensions so it doesn't generate NaNs the on first iteration
