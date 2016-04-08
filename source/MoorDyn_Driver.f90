@@ -32,7 +32,7 @@ PROGRAM Main
   
    IMPLICIT NONE
   
-   INTEGER(IntKi)                         :: i,j, j_ss        ! generic loop counter
+   INTEGER(IntKi)                         :: i,j              ! generic loop counter
    INTEGER(IntKi)                         :: ErrStat          ! Status of error message
    CHARACTER(1024)                        :: ErrMsg           ! Error message if ErrStat /= ErrID_None
   
@@ -52,27 +52,26 @@ PROGRAM Main
    TYPE (MD_DiscreteStateType)            :: xd_MD
    TYPE (MD_ConstraintStateType)          :: z_MD
    TYPE (MD_OtherStateType)               :: other_MD
+   TYPE (MD_MiscVarType)                  :: m_MD
   
    TYPE(MD_ContinuousStateType)           :: x_MD_pred                              ! Predicted continuous states
    TYPE(MD_DiscreteStateType)             :: xd_MD_pred                             ! Predicted discrete states
    TYPE(MD_ConstraintStateType)           :: z_MD_pred                              ! Predicted constraint states
-   TYPE(MD_OtherStateType)                :: other_MD_old                           ! Other/optimization states (copied for the case of subcycling)
+   TYPE(MD_OtherStateType)                :: other_MD_pred                          ! Other states
   
    TYPE (MD_InputType),      ALLOCATABLE  :: MD_Input(:)
    REAL(DbKi) , DIMENSION(:), ALLOCATABLE :: MD_InputTimes(:)
   
    TYPE (MD_OutputType)                    :: y_MD
-   REAL(DbKi) , DIMENSION(:), ALLOCATABLE  :: MD_OutputTimes
   
    INTEGER(IntKi)                          :: MD_interp_order     ! order of interpolation/extrapolation
   
-   CHARACTER(1024)                                :: OutFileName          ! The name of the output file  including the full path.
+   CHARACTER(1024)                         :: OutFileName          ! The name of the output file  including the full path.
   
    INTEGER(IntKi)                          :: UnOutFile     ! output file
-   REAL(ReKi)   :: MDWrOutput(10)        ! one line of output data  ! should allocate in future! <<<
+   REAL(ReKi)                              :: MDWrOutput(10)        ! one line of output data  ! should allocate in future! <<<
 
    CHARACTER(200)                         :: Frmt                        ! a string to hold a format statement
-   CHARACTER(20)                          :: TempString
 
 
    ! -------------------------------------------------------------------------
@@ -115,14 +114,14 @@ PROGRAM Main
                z_MD          , &
                other_MD      , &
                y_MD          , &
+               m_MD          , &
                dt_global     , &
                InitOutData_MD, &
                ErrStat       , &
                ErrMsg )
    IF (ErrStat > ErrID_None) THEN
       CALL WrScr(ErrMsg)
-      Call WrScr("Error in calling MD_Init.  Driver program terminating.")
-      call EXIT()
+      call ProgAbort('Error in calling MD_Init.  Driver program terminating.')
    END IF
 
    CALL DispNVD(InitOutData_MD%Ver)
@@ -152,6 +151,8 @@ PROGRAM Main
    CALL CheckError( ErrStat, 'Message from MD_CopyDiscState (init): '//NewLine//ErrMsg )
    CALL MD_CopyConstrState ( z_MD,  z_MD_pred, MESH_NEWCOPY, Errstat, ErrMsg)
    CALL CheckError( ErrStat, 'Message from MD_CopyConstrState (init): '//NewLine//ErrMsg )
+   CALL MD_CopyOtherState ( other_MD,  other_MD_pred, MESH_NEWCOPY, Errstat, ErrMsg)
+   CALL CheckError( ErrStat, 'Message from MD_CopyOtherState (init): '//NewLine//ErrMsg )
 
    ! ------------------------------------------------------------------------------------
    ! open output file to start recording fairlead tensions to check they're returned
@@ -186,7 +187,7 @@ PROGRAM Main
    
    
    Print *, 'MoorDyn_driver: starting time stepping'
-	
+
 
    ! BEGIN time marching
    DO n_t_global = 0, n_t_final
@@ -214,20 +215,22 @@ PROGRAM Main
 
 
       ! update states
-      CALL MD_CopyContState   ( x_MD,  x_MD_pred, MESH_UPDATECOPY, Errstat, ErrMsg)
-      CALL MD_CopyDiscState   (xd_MD, xd_MD_pred, MESH_UPDATECOPY, Errstat, ErrMsg)
-      CALL MD_CopyConstrState ( z_MD,  z_MD_pred, MESH_UPDATECOPY, Errstat, ErrMsg)
+      CALL MD_CopyContState   ( x_MD,         x_MD_pred, MESH_UPDATECOPY, Errstat, ErrMsg)
+      CALL MD_CopyDiscState   (xd_MD,        xd_MD_pred, MESH_UPDATECOPY, Errstat, ErrMsg)
+      CALL MD_CopyConstrState ( z_MD,         z_MD_pred, MESH_UPDATECOPY, Errstat, ErrMsg)
+      CALL MD_CopyOtherState  ( other_MD, other_MD_pred, MESH_UPDATECOPY, Errstat, ErrMsg)
 
-      CALL  MD_UpdateStates(t_global       , &
-                            n_t_global     , &
+      CALL  MD_UpdateStates(t_global      , &
+                            n_t_global    , &
                             MD_Input      , &
                             MD_InputTimes , &
                             p_MD          , &
-                            x_MD_pred          , &
-                            xd_MD         , &
-                            z_MD          , &
-                            other_MD      , &
-                            ErrStat        , &
+                            x_MD_pred     , &
+                            xd_MD_pred    , &
+                            z_MD_pred     , &
+                            other_MD_pred , &
+                            m_MD          , &
+                            ErrStat       , &
                             ErrMsg )
       IF (ErrStat.NE.0) THEN
          CALL WrScr(ErrMsg)
@@ -236,18 +239,19 @@ PROGRAM Main
       
       ! advance time
       MD_InputTimes(1) = t_global + dt_global
-		
-		
+
+
       ! calculate outputs
-      CALL MD_CalcOutput(t_global    , &
-                         MD_Input(1) , &
-                         p_MD        , &
-                         x_MD_pred        , &
-                         xd_MD       , &
-                         z_MD        , &
-                         other_MD    , &
-                         y_MD        , &
-                         ErrStat     , &
+      CALL MD_CalcOutput(t_global      , &
+                         MD_Input(1)   , &
+                         p_MD          , &
+                         x_MD_pred     , &
+                         xd_MD_pred    , &
+                         z_MD_pred     , &
+                         other_MD_pred , &
+                         y_MD          , &
+                         m_MD          , &
+                         ErrStat       , &
                          ErrMsg)
       IF (ErrStat.NE.0) THEN
          CALL WrScr(ErrMsg)
@@ -261,15 +265,16 @@ PROGRAM Main
       WRITE(UnOutFile,Frmt)  t_global, ' ', MD_Input(1)%PtFairleadDisplacement%TranslationDisp(1,1), ( ' ', y_MD%WriteOutput(I), I=1,p_MD%NumOuts )
 
       
-		! copy final predictions to actual states
-      CALL MD_CopyContState   ( x_MD_pred,  x_MD, MESH_UPDATECOPY, Errstat, ErrMsg)
-      CALL MD_CopyDiscState   (xd_MD_pred, xd_MD, MESH_UPDATECOPY, Errstat, ErrMsg)
-      CALL MD_CopyConstrState ( z_MD_pred,  z_MD, MESH_UPDATECOPY, Errstat, ErrMsg)
+        ! copy final predictions to actual states
+      CALL MD_CopyContState  (    x_MD_pred,     x_MD, MESH_UPDATECOPY, Errstat, ErrMsg)
+      CALL MD_CopyDiscState  (   xd_MD_pred,    xd_MD, MESH_UPDATECOPY, Errstat, ErrMsg)
+      CALL MD_CopyConstrState(    z_MD_pred,     z_MD, MESH_UPDATECOPY, Errstat, ErrMsg)
+      CALL MD_CopyOtherState (other_MD_pred, other_MD, MESH_UPDATECOPY, Errstat, ErrMsg)
    
-	END DO
+    END DO
    ! END time marching
    
-	
+
 
    ! close output file
    CLOSE( UnOutFile, IOSTAT = ErrStat )
@@ -283,7 +288,7 @@ PROGRAM Main
       CALL MeshDestroy(MD_Input(2)%PtFairleadDisplacement, ErrStat,ErrMsg)
       CALL MeshDestroy(MD_Input(3)%PtFairleadDisplacement, ErrStat,ErrMsg)
    END IF
-	
+
    ! Destroy all objects
    CALL MD_End(MD_Input(1), &
                p_MD       , &
@@ -292,6 +297,7 @@ PROGRAM Main
                z_MD       , &
                other_MD   , &
                y_MD       , &
+               m_MD       , &
                ErrStat    , &
                ErrMsg )
    IF (ErrStat.NE.0) THEN
@@ -313,7 +319,7 @@ PROGRAM Main
    CALL MD_DestroyContState(x_MD_pred, ErrStat, ErrMsg); IF (ErrStat/= ErrID_None) CALL WrScr(TRIM(ErrMsg))
    CALL MD_DestroyDiscState(xd_MD_pred, ErrStat, ErrMsg); IF (ErrStat/= ErrID_None) CALL WrScr(TRIM(ErrMsg))
    CALL MD_DestroyConstrState(z_MD_pred, ErrStat, ErrMsg); IF (ErrStat/= ErrID_None) CALL WrScr(TRIM(ErrMsg))
-   CALL MD_DestroyOtherState(other_MD_old, ErrStat, ErrMsg); IF (ErrStat/= ErrID_None) CALL WrScr(TRIM(ErrMsg))
+   CALL MD_DestroyOtherState(other_MD_pred, ErrStat, ErrMsg); IF (ErrStat/= ErrID_None) CALL WrScr(TRIM(ErrMsg))
 
  CONTAINS
 

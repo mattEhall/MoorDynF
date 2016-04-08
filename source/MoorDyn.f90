@@ -27,7 +27,7 @@ MODULE MoorDyn
 
    PRIVATE
 
-   TYPE(ProgDesc), PARAMETER            :: MD_ProgDesc = ProgDesc( 'MoorDyn', 'v1.00.02F-mth', '24-Nov-2015' )
+   TYPE(ProgDesc), PARAMETER            :: MD_ProgDesc = ProgDesc( 'MoorDyn', 'v1.01.00F-mth', '11-Jan-2016' )
 
 
    PUBLIC :: MD_Init
@@ -39,7 +39,7 @@ MODULE MoorDyn
 CONTAINS
 
    !=========================================   MD_Init   ===================================
-   SUBROUTINE MD_Init(InitInp, u, p, x, xd, z, other, y, DTcoupling, InitOut, ErrStat, ErrMsg)
+   SUBROUTINE MD_Init(InitInp, u, p, x, xd, z, other, y, m, DTcoupling, InitOut, ErrStat, ErrMsg)
 
       IMPLICIT NONE
 
@@ -49,8 +49,9 @@ CONTAINS
       TYPE(MD_ContinuousStateType), INTENT(  OUT)  :: x           ! INTENT( OUT) : Initial continuous states
       TYPE(MD_DiscreteStateType),   INTENT(  OUT)  :: xd          ! INTENT( OUT) : Initial discrete states
       TYPE(MD_ConstraintStateType), INTENT(  OUT)  :: z           ! INTENT( OUT) : Initial guess of the constraint states
-      TYPE(MD_OtherStateType),      INTENT(  OUT)  :: other       ! INTENT( OUT) : Initial other/optimization states
+      TYPE(MD_OtherStateType),      INTENT(  OUT)  :: other       ! INTENT( OUT) : Initial other states
       TYPE(MD_OutputType),          INTENT(  OUT)  :: y           ! INTENT( OUT) : Initial system outputs (outputs are not calculated; only the output mesh is initialized)
+      TYPE(MD_MiscVarType),         INTENT(  OUT)  :: m           ! INTENT( OUT) : Initial misc/optimization variables
       REAL(DbKi),                   INTENT(INOUT)  :: DTcoupling  ! Coupling interval in seconds: the rate that Output is the actual coupling interval
       TYPE(MD_InitOutputType),      INTENT(INOUT)  :: InitOut     ! Output for initialization routine
       INTEGER(IntKi),               INTENT(  OUT)  :: ErrStat     ! Error status of the operation
@@ -73,7 +74,7 @@ CONTAINS
       TYPE(MD_InputType)    :: uArray(1)    ! a size-one array for u to make call to TimeStep happy
       REAL(DbKi)            :: utimes(1)    ! a size-one array saying time is 0 to make call to TimeStep happy  
 
-
+      CHARACTER(MaxWrScrLen)                       :: Message
 
 
       ErrStat = ErrID_None
@@ -103,12 +104,12 @@ CONTAINS
 
 
       ! call function that reads input file and creates cross-referenced Connect and Line objects
-      CALL MDIO_ReadInput(InitInp, p, other, ErrStat2, ErrMsg2)
+      CALL MDIO_ReadInput(InitInp, p, m, ErrStat2, ErrMsg2)
          CALL CheckError( ErrStat2, ErrMsg2 )
          IF (ErrStat >= AbortErrLev) RETURN
 
       ! process the OutList array and set up the index arrays for the requested output quantities
-      CALL MDIO_ProcessOutList(InitInp%OutList, p, other, y, InitOut, ErrStat2, ErrMsg2 )
+      CALL MDIO_ProcessOutList(InitInp%OutList, p, m, y, InitOut, ErrStat2, ErrMsg2 )
          CALL CheckError( ErrStat2, ErrMsg2 )
          IF (ErrStat >= AbortErrLev) RETURN
 
@@ -125,16 +126,16 @@ CONTAINS
 
       ! cycle through Connects and identify Connect types
       DO I = 1, p%NConnects
-         TempString = other%ConnectList(I)%type
+         TempString = m%ConnectList(I)%type
          CALL Conv2UC(TempString)
          if (TempString == 'FIXED') then
-            other%ConnectList(I)%TypeNum = 0
+            m%ConnectList(I)%TypeNum = 0
             p%NAnchs = p%NAnchs + 1
          else if (TempString == 'VESSEL') then
-            other%ConnectList(I)%TypeNum = 1
+            m%ConnectList(I)%TypeNum = 1
             p%NFairs = p%NFairs + 1             ! if a vessel connection, increment fairlead counter
          else if (TempString == 'CONNECT') then
-            other%ConnectList(I)%TypeNum = 2
+            m%ConnectList(I)%TypeNum = 2
             p%NConns = p%NConns + 1
          else
             CALL CheckError( ErrID_Fatal, 'Error in provided Connect type.  Must be fixed, vessel, or connect.' )
@@ -146,14 +147,14 @@ CONTAINS
 
 
       ! allocate fairleads list
-      ALLOCATE ( other%FairIdList(p%NFairs), STAT = ErrStat )
+      ALLOCATE ( m%FairIdList(p%NFairs), STAT = ErrStat )
       IF ( ErrStat /= ErrID_None ) THEN
          CALL CheckError( ErrID_Fatal, 'Error allocating space for FairIdList array.')
          RETURN
       END IF
 
       ! allocate connect list
-      ALLOCATE ( other%ConnIdList(p%NConns), STAT = ErrStat )
+      ALLOCATE ( m%ConnIdList(p%NConns), STAT = ErrStat )
       IF ( ErrStat /= ErrID_None ) THEN
          CALL CheckError( ErrID_Fatal, 'Error allocating space for ConnIdList array.')
          RETURN
@@ -164,11 +165,11 @@ CONTAINS
       J = 1  ! counter for fairlead number
       K = 1  ! counter for connect number
       DO I = 1,p%NConnects
-         IF (other%ConnectList(I)%TypeNum == 1) THEN
-           other%FairIdList(J) = I             ! if a vessel connection, add ID to list
+         IF (m%ConnectList(I)%TypeNum == 1) THEN
+           m%FairIdList(J) = I             ! if a vessel connection, add ID to list
            J = J + 1
-         ELSE IF (other%ConnectList(I)%TypeNum == 2) THEN
-           other%ConnIdList(K) = I             ! if a connect connection, add ID to list
+         ELSE IF (m%ConnectList(I)%TypeNum == 2) THEN
+           m%ConnIdList(K) = I             ! if a connect connection, add ID to list
            K = K + 1
          END IF
       END DO
@@ -176,7 +177,7 @@ CONTAINS
 
       ! go through lines and allocate variables
       DO I = 1, p%NLines
-         CALL SetupLine( other%LineList(I), other%LineTypeList(other%LineList(I)%PropsIdNum), p%rhoW ,  ErrStat2, ErrMsg2)
+         CALL SetupLine( m%LineList(I), m%LineTypeList(m%LineList(I)%PropsIdNum), p%rhoW ,  ErrStat2, ErrMsg2)
             CALL CheckError( ErrStat2, ErrMsg2 )
             IF (ErrStat >= AbortErrLev) RETURN
       END DO
@@ -187,7 +188,7 @@ CONTAINS
       !------------------------------------------------------------------------------------
 
       ! allocate list of starting state vector indices for each line  - does this belong elsewhere?
-      ALLOCATE ( other%LineStateIndList(p%NLines), STAT = ErrStat )
+      ALLOCATE ( m%LineStateIndList(p%NLines), STAT = ErrStat )
       IF ( ErrStat /= ErrID_None ) THEN
         CALL CheckError(ErrID_Fatal, ' Error allocating LineStateIndList array.')
         RETURN
@@ -198,8 +199,8 @@ CONTAINS
       J = p%NConns*6   ! start index of first line's states (added six state variables for each "connect"-type connection)
 
       DO I = 1, p%NLines
-         other%LineStateIndList(I) = J+1            ! assign start index of each line
-         J = J + 6*(other%LineList(I)%N - 1)  !add 6 state variables for each internal node
+         m%LineStateIndList(I) = J+1            ! assign start index of each line
+         J = J + 6*(m%LineList(I)%N - 1)  !add 6 state variables for each internal node
       END DO
 
 
@@ -235,9 +236,9 @@ CONTAINS
       !  --------------------------- set up initial condition of each fairlead -------------------------------
       DO i = 1,p%NFairs
 
-         Pos(1) = other%ConnectList(other%FairIdList(i))%conX ! set relative position of each fairlead i (I'm pretty sure this is just relative to ptfm origin)
-         Pos(2) = other%ConnectList(other%FairIdList(i))%conY
-         Pos(3) = other%ConnectList(other%FairIdList(i))%conZ
+         Pos(1) = m%ConnectList(m%FairIdList(i))%conX ! set relative position of each fairlead i (I'm pretty sure this is just relative to ptfm origin)
+         Pos(2) = m%ConnectList(m%FairIdList(i))%conY
+         Pos(3) = m%ConnectList(m%FairIdList(i))%conZ
 
          CALL MeshPositionNode(u%PtFairleadDisplacement,i,Pos,ErrStat2,ErrMsg2)! "assign the coordinates of each node in the global coordinate space"
 
@@ -295,31 +296,31 @@ CONTAINS
 
       ! first do it for all connections (connect and anchor types will be saved)
       DO I = 1, p%NConnects
-         other%ConnectList(I)%r(1) = other%ConnectList(I)%conX
-         other%ConnectList(I)%r(2) = other%ConnectList(I)%conY
-         other%ConnectList(I)%r(3) = other%ConnectList(I)%conZ
-         other%ConnectList(I)%rd(1) = 0.0_ReKi
-         other%ConnectList(I)%rd(2) = 0.0_ReKi
-         other%ConnectList(I)%rd(3) = 0.0_ReKi
+         m%ConnectList(I)%r(1) = m%ConnectList(I)%conX
+         m%ConnectList(I)%r(2) = m%ConnectList(I)%conY
+         m%ConnectList(I)%r(3) = m%ConnectList(I)%conZ
+         m%ConnectList(I)%rd(1) = 0.0_ReKi
+         m%ConnectList(I)%rd(2) = 0.0_ReKi
+         m%ConnectList(I)%rd(3) = 0.0_ReKi
       END DO
 
       ! then do it for fairlead types
       DO I = 1,p%NFairs
          DO J = 1, 3
-            other%ConnectList(other%FairIdList(I))%r(J)  = u%PtFairleadDisplacement%Position(J,I) + u%PtFairleadDisplacement%TranslationDisp(J,I)
-            other%ConnectList(other%FairIdList(I))%rd(J) = 0.0_ReKi
+            m%ConnectList(m%FairIdList(I))%r(J)  = u%PtFairleadDisplacement%Position(J,I) + u%PtFairleadDisplacement%TranslationDisp(J,I)
+            m%ConnectList(m%FairIdList(I))%rd(J) = 0.0_ReKi
          END DO
       END DO
 
       ! for connect types, write the coordinates to the state vector
       DO I = 1,p%NConns
-         x%states(6*I-2:6*I)   = other%ConnectList(other%ConnIdList(I))%r  ! double check order of r vs rd
-         x%states(6*I-5:6*I-3) = other%ConnectList(other%ConnIdList(I))%rd
+         x%states(6*I-2:6*I)   = m%ConnectList(m%ConnIdList(I))%r  ! double check order of r vs rd
+         x%states(6*I-5:6*I-3) = m%ConnectList(m%ConnIdList(I))%rd
       END DO
 
       ! --------------------------------------------------------------------
       !          open output file(s) and write header lines
-      CALL MDIO_OpenOutput( InitInp%FileName,  p, other, InitOut, ErrStat2, ErrMsg2 )
+      CALL MDIO_OpenOutput( InitInp%FileName, p, m, InitOut, ErrStat2, ErrMsg2 )
          CALL CheckError( ErrStat2, ErrMsg2 )
          IF (ErrStat >= AbortErrLev) RETURN
       ! --------------------------------------------------------------------
@@ -331,16 +332,16 @@ CONTAINS
       ! --------------------------------------------------------------------
       DO I = 1, p%NLines
 
-         N = other%LineList(I)%N ! for convenience
+         N = m%LineList(I)%N ! for convenience
 
          ! set end node positions and velocities from connect objects
-         other%LineList(I)%r(:,N) = other%ConnectList(other%LineList(I)%FairConnect)%r
-         other%LineList(I)%r(:,0) = other%ConnectList(other%LineList(I)%AnchConnect)%r
-         other%LineList(I)%rd(:,N) = (/ 0.0, 0.0, 0.0 /)  ! set anchor end velocities to zero
-         other%LineList(I)%rd(:,0) = (/ 0.0, 0.0, 0.0 /)  ! set fairlead end velocities to zero
+         m%LineList(I)%r(:,N) = m%ConnectList(m%LineList(I)%FairConnect)%r
+         m%LineList(I)%r(:,0) = m%ConnectList(m%LineList(I)%AnchConnect)%r
+         m%LineList(I)%rd(:,N) = (/ 0.0, 0.0, 0.0 /)  ! set anchor end velocities to zero
+         m%LineList(I)%rd(:,0) = (/ 0.0, 0.0, 0.0 /)  ! set fairlead end velocities to zero
 
          ! set initial line internal node positions using quasi-static model or straight-line interpolation from anchor to fairlead
-         CALL InitializeLine( other%LineList(I), other%LineTypeList(other%LineList(I)%PropsIdNum), p%rhoW ,  ErrStat2, ErrMsg2)
+         CALL InitializeLine( m%LineList(I), m%LineTypeList(m%LineList(I)%PropsIdNum), p%rhoW ,  ErrStat2, ErrMsg2)
             CALL CheckError( ErrStat2, ErrMsg2 )
             IF (ErrStat >= AbortErrLev) RETURN
             IF (ErrStat >= ErrId_Warn) CALL WrScr("   Catenary solver failed for one or more lines.  Using linear node spacing.")  ! make this statement more accurate
@@ -348,8 +349,8 @@ CONTAINS
          ! assign the resulting internal node positions to the integrator initial state vector! (velocities leave at 0)
          DO J = 1, N-1
            DO K = 1, 3
-             x%states(other%LineStateIndList(I) + 3*N-3 + 3*J-3 + K-1 ) = other%LineList(I)%r(K,J) ! assign position
-             x%states(other%LineStateIndList(I)         + 3*J-3 + K-1 ) = 0.0_ReKi ! assign velocities (of zero)
+             x%states(m%LineStateIndList(I) + 3*N-3 + 3*J-3 + K-1 ) = m%LineList(I)%r(K,J) ! assign position
+             x%states(m%LineStateIndList(I)         + 3*J-3 + K-1 ) = 0.0_ReKi ! assign velocities (of zero)
            END DO
          END DO
 
@@ -357,7 +358,7 @@ CONTAINS
 
 
 !      ! try writing output for troubleshooting purposes (TEMPORARY)
-!      CALL MDIO_WriteOutputs(-1.0_DbKi, p, other, y, ErrStat, ErrMsg)
+!      CALL MDIO_WriteOutputs(-1.0_DbKi, p, m, y, ErrStat, ErrMsg)
 !      IF ( ErrStat >= AbortErrLev ) THEN
 !         ErrMsg = ' Error in MDIO_WriteOutputs: '//TRIM(ErrMsg)
 !         RETURN
@@ -372,8 +373,8 @@ CONTAINS
 
       ! boost drag coefficient of each line type
       DO I = 1, p%NTypes
-         other%LineTypeList(I)%Cdn = other%LineTypeList(I)%Cdn * InitInp%CdScaleIC
-         other%LineTypeList(I)%Cdt = other%LineTypeList(I)%Cdt * InitInp%CdScaleIC
+         m%LineTypeList(I)%Cdn = m%LineTypeList(I)%Cdn * InitInp%CdScaleIC
+         m%LineTypeList(I)%Cdt = m%LineTypeList(I)%Cdt * InitInp%CdScaleIC
       END DO
 
       ! allocate array holding three latest fairlead tensions
@@ -401,7 +402,7 @@ CONTAINS
       DO I = 1, ceiling(InitInp%TMaxIC/InitInp%DTIC)   ! loop through IC gen time steps, up to maximum
 
          ! integrate the EOMs one DTIC s time step
-         CALL TimeStep ( t, InitInp%DTIC, uArray, utimes, p, x, xd, z, other, ErrStat, ErrMsg )
+         CALL TimeStep ( t, InitInp%DTIC, uArray, utimes, p, x, xd, z, other, m, ErrStat, ErrMsg )
             CALL CheckError( ErrStat2, ErrMsg2 )
             IF (ErrStat >= AbortErrLev) RETURN
 
@@ -409,12 +410,14 @@ CONTAINS
          DO J = 1, p%NFairs
             FairTensIC(J,3) = FairTensIC(J,2)
             FairTensIC(J,2) = FairTensIC(J,1)
-            FairTensIC(J,1) = TwoNorm(other%ConnectList(other%FairIdList(J))%Ftot(:))
+            FairTensIC(J,1) = TwoNorm(m%ConnectList(m%FairIdList(J))%Ftot(:))
          END DO
 
          ! provide status message
-         CALL WrOver('   t='//trim(Num2LStr(t))//'  FairTen 1: '//trim(Num2LStr(FairTensIC(1,1)))// &
-                        ', '//trim(Num2LStr(FairTensIC(1,2)))//', '//trim(Num2LStr(FairTensIC(1,3))))
+         ! bjj: putting this in a string so we get blanks to cover up previous values (if current string is shorter than previous one)
+         Message = '   t='//trim(Num2LStr(t))//'  FairTen 1: '//trim(Num2LStr(FairTensIC(1,1)))// &
+                        ', '//trim(Num2LStr(FairTensIC(1,2)))//', '//trim(Num2LStr(FairTensIC(1,3))) 
+         CALL WrOver( Message )
 
          ! check for convergence (compare current tension at each fairlead with previous two values)
          IF (I > 2) THEN
@@ -444,13 +447,16 @@ CONTAINS
 
       ! UNboost drag coefficient of each line type
       DO I = 1, p%NTypes
-         other%LineTypeList(I)%Cdn = other%LineTypeList(I)%Cdn / InitInp%CdScaleIC
-         other%LineTypeList(I)%Cdt = other%LineTypeList(I)%Cdt / InitInp%CdScaleIC
+         m%LineTypeList(I)%Cdn = m%LineTypeList(I)%Cdn / InitInp%CdScaleIC
+         m%LineTypeList(I)%Cdt = m%LineTypeList(I)%Cdt / InitInp%CdScaleIC
       END DO
 
 
       p%dtCoupling = DTcoupling  ! store coupling time step for use in updatestates
 
+      other%dummy = 0
+      xd%dummy    = 0
+      z%dummy     = 0
 
    CONTAINS
 
@@ -476,11 +482,11 @@ CONTAINS
 
 
             IF ( ErrStat >= AbortErrLev ) THEN                
-               IF (ALLOCATED(other%FairIdList       ))  DEALLOCATE(other%FairIdList       )
-               IF (ALLOCATED(other%ConnIdList       ))  DEALLOCATE(other%ConnIdList       )
-               IF (ALLOCATED(other%LineStateIndList ))  DEALLOCATE(other%LineStateIndList )
-               IF (ALLOCATED(x%states               ))  DEALLOCATE(x%states               )
-               IF (ALLOCATED(FairTensIC             ))  DEALLOCATE(FairTensIC             ) 
+               IF (ALLOCATED(m%FairIdList       ))  DEALLOCATE(m%FairIdList       )
+               IF (ALLOCATED(m%ConnIdList       ))  DEALLOCATE(m%ConnIdList       )
+               IF (ALLOCATED(m%LineStateIndList ))  DEALLOCATE(m%LineStateIndList )
+               IF (ALLOCATED(x%states           ))  DEALLOCATE(x%states           )
+               IF (ALLOCATED(FairTensIC         ))  DEALLOCATE(FairTensIC         ) 
             END IF
          END IF
 
@@ -493,7 +499,7 @@ CONTAINS
 
 
    !==============================================================================================
-   SUBROUTINE MD_UpdateStates( t, n, u, utimes, p, x, xd, z, other, ErrStat, ErrMsg)
+   SUBROUTINE MD_UpdateStates( t, n, u, utimes, p, x, xd, z, other, m, ErrStat, ErrMsg)
 
       REAL(DbKi)                      , INTENT(IN   ) :: t
       INTEGER(IntKi)                  , INTENT(IN   ) :: n
@@ -504,12 +510,9 @@ CONTAINS
       TYPE(MD_DiscreteStateType)      , INTENT(INOUT) :: xd         ! INTENT(INOUT)
       TYPE(MD_ConstraintStateType)    , INTENT(INOUT) :: z          ! INTENT(INOUT)
       TYPE(MD_OtherStateType)         , INTENT(INOUT) :: other      ! INTENT(INOUT)
+      TYPE(MD_MiscVarType)            , INTENT(INOUT) :: m          ! INTENT(INOUT)
       INTEGER(IntKi)                  , INTENT(  OUT) :: ErrStat    ! Error status of the operation
       CHARACTER(*)                    , INTENT(  OUT) :: ErrMsg     ! Error message if ErrStat /= ErrID_None
-
-      INTEGER(IntKi)                                  :: I          ! counter
-      INTEGER(IntKi)                                  :: J          ! counter
-!      INTEGER(IntKi)                                  :: K          ! counter
 
       INTEGER(IntKi)                                  :: ErrStat2   ! Error status of the operation
       CHARACTER(ErrMsgLen)                            :: ErrMsg2    ! Error message if ErrStat2 /= ErrID_None
@@ -539,14 +542,14 @@ CONTAINS
 !      ! go through fairleads and apply motions from driver
 !      DO I = 1, p%NFairs
 !         DO J = 1,3
-!            other%ConnectList(other%FairIdList(I))%r(J)  = u_interp%PtFairleadDisplacement%Position(J,I) + u_interp%PtFairleadDisplacement%TranslationDisp(J,I)
-!            other%ConnectList(other%FairIdList(I))%rd(J) = u_interp%PtFairleadDisplacement%TranslationVel(J,I)  ! is this right? <<<
+!            m%ConnectList(m%FairIdList(I))%r(J)  = u_interp%PtFairleadDisplacement%Position(J,I) + u_interp%PtFairleadDisplacement%TranslationDisp(J,I)
+!            m%ConnectList(m%FairIdList(I))%rd(J) = u_interp%PtFairleadDisplacement%TranslationVel(J,I)  ! is this right? <<<
 !         END DO
 !      END DO
 !
 
       ! call function that loops through mooring model time steps
-      CALL TimeStep ( t2, p%dtCoupling, u, utimes, p, x, xd, z, other, ErrStat2, ErrMsg2 )
+      CALL TimeStep ( t2, p%dtCoupling, u, utimes, p, x, xd, z, other, m, ErrStat2, ErrMsg2 )
          CALL CheckError( ErrStat2, ErrMsg2 )
          IF (ErrStat >= AbortErrLev) RETURN
 
@@ -586,7 +589,7 @@ CONTAINS
 
 
    !========================================================================================
-   SUBROUTINE MD_CalcOutput( t, u, p, x, xd, z, other, y, ErrStat, ErrMsg )
+   SUBROUTINE MD_CalcOutput( t, u, p, x, xd, z, other, y, m, ErrStat, ErrMsg )
 
       REAL(DbKi)                     , INTENT(IN   ) :: t
       TYPE( MD_InputType )           , INTENT(IN   ) :: u       ! INTENT(IN   )
@@ -594,8 +597,9 @@ CONTAINS
       TYPE( MD_ContinuousStateType ) , INTENT(IN   ) :: x       ! INTENT(IN   )
       TYPE( MD_DiscreteStateType )   , INTENT(IN   ) :: xd      ! INTENT(IN   )
       TYPE( MD_ConstraintStateType ) , INTENT(IN   ) :: z       ! INTENT(IN   )
-      TYPE( MD_OtherStateType )      , INTENT(INOUT) :: other   ! INTENT(INOUT)
+      TYPE( MD_OtherStateType )      , INTENT(IN   ) :: other   ! INTENT(IN   )
       TYPE( MD_OutputType )          , INTENT(INOUT) :: y       ! INTENT(INOUT)
+      TYPE(MD_MiscVarType)           , INTENT(INOUT) :: m       ! INTENT(INOUT)
       INTEGER(IntKi)                 , INTENT(INOUT) :: ErrStat
       CHARACTER(*)                   , INTENT(INOUT) :: ErrMsg
 
@@ -615,25 +619,25 @@ CONTAINS
       ! go through fairleads and apply motions from driver
       DO I = 1, p%NFairs
          DO J = 1,3
-            other%ConnectList(other%FairIdList(I))%r(J)  = u%PtFairleadDisplacement%Position(J,I) + u%PtFairleadDisplacement%TranslationDisp(J,I)
-            other%ConnectList(other%FairIdList(I))%rd(J) = u%PtFairleadDisplacement%TranslationVel(J,I)  ! is this right? <<<
+            m%ConnectList(m%FairIdList(I))%r(J)  = u%PtFairleadDisplacement%Position(J,I) + u%PtFairleadDisplacement%TranslationDisp(J,I)
+            m%ConnectList(m%FairIdList(I))%rd(J) = u%PtFairleadDisplacement%TranslationVel(J,I)  ! is this right? <<<
          END DO
       END DO
 
       ! call CalcContStateDeriv in order to run model and calculate dynamics with provided x and u
-      CALL MD_CalcContStateDeriv( t2, u, p, x, xd, z, other, dxdt, ErrStat, ErrMsg )
+      CALL MD_CalcContStateDeriv( t2, u, p, x, xd, z, other, m, dxdt, ErrStat, ErrMsg )
 
 
       ! assign net force on fairlead Connects to the output mesh
       DO i = 1, p%NFairs
          DO J=1,3
-            y%PtFairleadLoad%Force(J,I) = other%ConnectList(other%FairIdList(I))%Ftot(J)
+            y%PtFairleadLoad%Force(J,I) = m%ConnectList(m%FairIdList(I))%Ftot(J)
          END DO
       END DO
 
 
-      ! calculate outputs (y%WriteOutput) for glue code and write any other outputs to MoorDyn output files
-      CALL MDIO_WriteOutputs(REAL(t,DbKi) , p, other, y, ErrStat2, ErrMsg2)
+      ! calculate outputs (y%WriteOutput) for glue code and write any m outputs to MoorDyn output files
+      CALL MDIO_WriteOutputs(REAL(t,DbKi) , p, m, y, ErrStat2, ErrMsg2)
       CALL CheckError(ErrStat2, 'In MDIO_WriteOutputs: '//trim(ErrMsg2))
       IF ( ErrStat >= AbortErrLev ) RETURN
 
@@ -674,7 +678,7 @@ CONTAINS
 
 
    !=============================================================================================
-   SUBROUTINE MD_CalcContStateDeriv( t, u, p, x, xd, z, other, dxdt, ErrStat, ErrMsg )
+   SUBROUTINE MD_CalcContStateDeriv( t, u, p, x, xd, z, other, m, dxdt, ErrStat, ErrMsg )
    ! Tight coupling routine for computing derivatives of continuous states
    ! this is modelled off what used to be subroutine DoRHSmaster
 
@@ -684,7 +688,8 @@ CONTAINS
       TYPE(MD_ContinuousStateType),       INTENT(IN )    :: x       ! Continuous states at t
       TYPE(MD_DiscreteStateType),         INTENT(IN )    :: xd      ! Discrete states at t
       TYPE(MD_ConstraintStateType),       INTENT(IN )    :: z       ! Constraint states at t
-      TYPE(MD_OtherStateType),            INTENT(INOUT)  :: other   ! Other/optimization states
+      TYPE(MD_OtherStateType),            INTENT(IN )    :: other   ! Other states at t
+      TYPE(MD_MiscVarType),               INTENT(INOUT)  :: m       ! misc/optimization variables
       TYPE(MD_ContinuousStateType),       INTENT(  OUT)  :: dxdt    ! Continuous state derivatives at t
       INTEGER(IntKi),                     INTENT( OUT)   :: ErrStat ! Error status of the operation
       CHARACTER(*),                       INTENT( OUT)   :: ErrMsg  ! Error message if ErrStat /= ErrID_None
@@ -712,11 +717,11 @@ CONTAINS
       ! clear connection force and mass values
       DO L = 1, p%NConnects
         DO J = 1,3
-          other%ConnectList(L)%Ftot(J) = 0.0_ReKi
-          other%ConnectList(L)%Ftot(J) = 0.0_ReKi
+          m%ConnectList(L)%Ftot(J) = 0.0_ReKi
+          m%ConnectList(L)%Ftot(J) = 0.0_ReKi
           DO K = 1,3
-            other%ConnectList(L)%Mtot(K,J) = 0.0_ReKi
-            other%ConnectList(L)%Mtot(K,J) = 0.0_ReKi
+            m%ConnectList(L)%Mtot(K,J) = 0.0_ReKi
+            m%ConnectList(L)%Mtot(K,J) = 0.0_ReKi
           END DO
         END DO
       END DO
@@ -724,33 +729,33 @@ CONTAINS
       ! update fairlead positions for instantaneous values (fixed 2015-06-22)    
       DO K = 1, p%NFairs
          DO J = 1,3
-            other%ConnectList(other%FairIdList(K))%r(J)  = u%PtFairleadDisplacement%Position(J,K) + u%PtFairleadDisplacement%TranslationDisp(J,K)
-            other%ConnectList(other%FairIdList(K))%rd(J) = u%PtFairleadDisplacement%TranslationVel(J,K)  ! is this right? <<<
+            m%ConnectList(m%FairIdList(K))%r(J)  = u%PtFairleadDisplacement%Position(J,K) + u%PtFairleadDisplacement%TranslationDisp(J,K)
+            m%ConnectList(m%FairIdList(K))%rd(J) = u%PtFairleadDisplacement%TranslationVel(J,K)  ! is this right? <<<
          END DO
       END DO
 
 
       ! do Line force and acceleration calculations, also add end masses/forces to respective Connects
       DO L = 1, p%NLines
-        Istart = other%LineStateIndList(L)
-        Iend = Istart + 6*(other%LineList(L)%N - 1) - 1
-        CALL DoLineRHS(x%states(Istart:Iend), dxdt%states(Istart:Iend), t, other%LineList(L), &
-          other%LineTypeList(other%LineList(L)%PropsIdNum), &
-          other%ConnectList(other%LineList(L)%FairConnect)%Ftot, other%ConnectList(other%LineList(L)%FairConnect)%Mtot, &
-          other%ConnectList(other%LineList(L)%AnchConnect)%Ftot, other%ConnectList(other%LineList(L)%AnchConnect)%Mtot )
+        Istart = m%LineStateIndList(L)
+        Iend = Istart + 6*(m%LineList(L)%N - 1) - 1
+        CALL DoLineRHS(x%states(Istart:Iend), dxdt%states(Istart:Iend), t, m%LineList(L), &
+          m%LineTypeList(m%LineList(L)%PropsIdNum), &
+          m%ConnectList(m%LineList(L)%FairConnect)%Ftot, m%ConnectList(m%LineList(L)%FairConnect)%Mtot, &
+          m%ConnectList(m%LineList(L)%AnchConnect)%Ftot, m%ConnectList(m%LineList(L)%AnchConnect)%Mtot )
       END DO
 
 
       ! perform connection force and mass calculations (done to all connects for sake of calculating fairlead/anchor loads)
       DO L = 1, p%NConnects
          ! add Connect's own forces including buoyancy and weight
-         other%ConnectList(L)%Ftot(1) =other%ConnectList(L)%Ftot(1) + other%ConnectList(L)%conFX
-         other%ConnectList(L)%Ftot(2) =other%ConnectList(L)%Ftot(2) + other%ConnectList(L)%conFY
-         other%ConnectList(L)%Ftot(3) =other%ConnectList(L)%Ftot(3) + other%ConnectList(L)%conFZ + other%ConnectList(L)%conV*p%rhoW*p%g - other%ConnectList(L)%conM*p%g
+         m%ConnectList(L)%Ftot(1) =m%ConnectList(L)%Ftot(1) + m%ConnectList(L)%conFX
+         m%ConnectList(L)%Ftot(2) =m%ConnectList(L)%Ftot(2) + m%ConnectList(L)%conFY
+         m%ConnectList(L)%Ftot(3) =m%ConnectList(L)%Ftot(3) + m%ConnectList(L)%conFZ + m%ConnectList(L)%conV*p%rhoW*p%g - m%ConnectList(L)%conM*p%g
 
          ! add Connect's own mass
          DO J = 1,3
-            other%ConnectList(L)%Mtot(J,J) = other%ConnectList(L)%Mtot(J,J) + other%ConnectList(L)%conM
+            m%ConnectList(L)%Mtot(J,J) = m%ConnectList(L)%Mtot(J,J) + m%ConnectList(L)%conM
          END DO
       END DO  ! L
 
@@ -759,7 +764,7 @@ CONTAINS
       DO L = 1, p%NConns
         Istart = L*6-5
         Iend = L*6
-        CALL DoConnectRHS(x%states(Istart:Iend), dxdt%states(Istart:Iend), t, other%ConnectList(other%ConnIDList(L)))
+        CALL DoConnectRHS(x%states(Istart:Iend), dxdt%states(Istart:Iend), t, m%ConnectList(m%ConnIDList(L)))
       END DO
 
 
@@ -806,16 +811,16 @@ CONTAINS
 
          ! set end node positions and velocities from connect objects' states
          DO J = 1, 3
-            Line%r( J,N) = other%ConnectList(Line%FairConnect)%r(J)
-            Line%r( J,0) = other%ConnectList(Line%AnchConnect)%r(J)
-            Line%rd(J,N) = other%ConnectList(Line%FairConnect)%rd(J)
-            Line%rd(J,0) = other%ConnectList(Line%AnchConnect)%rd(J)
+            Line%r( J,N) = m%ConnectList(Line%FairConnect)%r(J)
+            Line%r( J,0) = m%ConnectList(Line%AnchConnect)%r(J)
+            Line%rd(J,N) = m%ConnectList(Line%FairConnect)%rd(J)
+            Line%rd(J,0) = m%ConnectList(Line%AnchConnect)%rd(J)
          END DO
 
          ! set interior node positions and velocities
          DO I = 1, N-1
             DO J = 1, 3
-               Line%r( J,I) = X( 3*N-3 + 3*I-3 + J)      ! r(J,I)  = X[3*N-3 + 3*i-3 + J]; // get positions  .. used to start from other%LineStateIndList(Line%IdNum) in whole state vector
+               Line%r( J,I) = X( 3*N-3 + 3*I-3 + J)      ! r(J,I)  = X[3*N-3 + 3*i-3 + J]; // get positions  .. used to start from m%LineStateIndList(Line%IdNum) in whole state vector
                Line%rd(J,I) = X(         3*I-3 + J)      ! rd(J,I) = X[        3*i-3 + J]; // get velocities
             END DO
          END DO
@@ -1081,7 +1086,7 @@ CONTAINS
 
 
    !===============================================================================================
-   SUBROUTINE MD_End(u, p, x, xd, z, other, y, ErrStat , ErrMsg)
+   SUBROUTINE MD_End(u, p, x, xd, z, other, y, m, ErrStat , ErrMsg)
       TYPE(MD_InputType) ,            INTENT(INOUT) :: u
       TYPE(MD_ParameterType) ,        INTENT(INOUT) :: p
       TYPE(MD_ContinuousStateType) ,  INTENT(INOUT) :: x
@@ -1089,6 +1094,7 @@ CONTAINS
       TYPE(MD_ConstraintStateType) ,  INTENT(INOUT) :: z
       TYPE(MD_OtherStateType) ,       INTENT(INOUT) :: other
       TYPE(MD_OutputType) ,           INTENT(INOUT) :: y
+      TYPE(MD_MiscVarType),           INTENT(INOUT) :: m      
       INTEGER(IntKi),                 INTENT(  OUT) :: ErrStat
       CHARACTER(*),                   INTENT(  OUT) :: ErrMsg
 
@@ -1103,7 +1109,7 @@ CONTAINS
 
 
       ! deallocate data associated with file output
-      CALL MDIO_CloseOutput ( p, other, ErrStat2, ErrMsg2 )
+      CALL MDIO_CloseOutput ( p, m, ErrStat2, ErrMsg2 )
          CALL CheckError( ErrStat2, ErrMsg2 )
          !IF (ErrStat >= AbortErrLev) RETURN
 
@@ -1123,7 +1129,8 @@ CONTAINS
          CALL CheckError( ErrStat2, ErrMsg2 )
       CALL MD_DestroyOutput(y, ErrStat2, ErrMsg2)
          CALL CheckError( ErrStat2, ErrMsg2 )
-
+      CALL MD_DestroyMisc(m, ErrStat2, ErrMsg2)
+         CALL CheckError( ErrStat2, ErrMsg2 )
 
  !     IF ( ErrStat==ErrID_None) THEN
  !        CALL WrScr('MoorDyn closed without errors')
@@ -1173,7 +1180,7 @@ CONTAINS
 
 
    !========================================================================================================
-   SUBROUTINE TimeStep ( t, dtStep, u, utimes, p, x, xd, z, other, ErrStat, ErrMsg )
+   SUBROUTINE TimeStep ( t, dtStep, u, utimes, p, x, xd, z, other, m, ErrStat, ErrMsg )
       REAL(ReKi)                     , INTENT(INOUT)      :: t
       REAL(ReKi)                     , INTENT(IN   )      :: dtStep     ! how long to advance the time for
       TYPE( MD_InputType )           , INTENT(INOUT)      :: u(:)       ! INTENT(IN   )
@@ -1182,7 +1189,8 @@ CONTAINS
       TYPE( MD_ContinuousStateType ) , INTENT(INOUT)      :: x
       TYPE( MD_DiscreteStateType )   , INTENT(IN   )      :: xd         ! INTENT(IN   )
       TYPE( MD_ConstraintStateType ) , INTENT(IN   )      :: z          ! INTENT(IN   )
-      TYPE( MD_OtherStateType )      , INTENT(INOUT)      :: other      ! INTENT(INOUT)
+      TYPE( MD_OtherStateType )      , INTENT(IN   )      :: other      ! INTENT(INOUT)
+      TYPE(MD_MiscVarType)           , INTENT(INOUT)      :: m          ! INTENT(INOUT)
       INTEGER(IntKi)                 , INTENT(  OUT)      :: ErrStat
       CHARACTER(*)                   , INTENT(  OUT)      :: ErrMsg
 
@@ -1194,7 +1202,6 @@ CONTAINS
       INTEGER(IntKi)                                      :: Nx         ! size of states vector
       INTEGER(IntKi)                                      :: I          ! counter
       INTEGER(IntKi)                                      :: J          ! counter
-      INTEGER(IntKi)                                      :: K          ! counter
       TYPE(MD_InputType)                                  :: u_interp   ! interpolated instantaneous input values to be calculated for each mooring time step
 
       Real(DbKi)                                          :: tDbKi   ! double version because that's what MD_Input_ExtrapInterp needs.
@@ -1230,7 +1237,7 @@ CONTAINS
 
          CALL MD_Input_ExtrapInterp(u, utimes, u_interp, tDbKi          , ErrStat, ErrMsg)   ! interpolate input mesh to correct time (t)
       
-         CALL MD_CalcContStateDeriv( t, u_interp, p, x, xd, z, other, dxdt, ErrStat, ErrMsg )
+         CALL MD_CalcContStateDeriv( t, u_interp, p, x, xd, z, other, m, dxdt, ErrStat, ErrMsg )
          DO J = 1, Nx
             x2%states(J) = x%states(J) + 0.5*dtM*dxdt%states(J)                                           !x1 = x0 + dt*f0/2.0;
          END DO
@@ -1239,7 +1246,7 @@ CONTAINS
    
          CALL MD_Input_ExtrapInterp(u, utimes, u_interp, tDbKi + 0.5*dtM, ErrStat, ErrMsg)   ! interpolate input mesh to correct time (t+0.5*dtM)
             
-         CALL MD_CalcContStateDeriv( (t + 0.5*dtM), u_interp, p, x2, xd, z, other, dxdt, ErrStat, ErrMsg )       !called with updated states x2 and time = t + dt/2.0
+         CALL MD_CalcContStateDeriv( (t + 0.5*dtM), u_interp, p, x2, xd, z, other, m, dxdt, ErrStat, ErrMsg )       !called with updated states x2 and time = t + dt/2.0
          DO J = 1, Nx
             x%states(J) = x%states(J) + dtM*dxdt%states(J)
          END DO
@@ -1252,7 +1259,7 @@ CONTAINS
    !      ! update Fairlead positions by integrating velocity and last position (do this AFTER the processing of the time step rather than before)
    !      DO J = 1, p%NFairs
    !         DO K = 1, 3
-   !          other%ConnectList(other%FairIdList(J))%r(K) = other%ConnectList(other%FairIdList(J))%r(K) + other%ConnectList(other%FairIdList(J))%rd(K)*dtM
+   !          m%ConnectList(m%FairIdList(J))%r(K) = m%ConnectList(m%FairIdList(J))%r(K) + m%ConnectList(m%FairIdList(J))%rd(K)*dtM
    !         END DO
    !      END DO
       
@@ -1272,7 +1279,7 @@ CONTAINS
       
       ! check for NaNs - is this a good place/way to do it?
       DO J = 1, Nx
-         IF (Is_NaN(DBLE(x%states(J)))) THEN
+         IF (Is_NaN(REAL(x%states(J),DbKi))) THEN
             ErrStat = ErrID_Fatal
             ErrMsg = ' NaN state detected.'
          END IF
@@ -1294,11 +1301,9 @@ CONTAINS
       INTEGER,       INTENT(   INOUT )   :: ErrStat       ! returns a non-zero value when an error occurs
       CHARACTER(*),  INTENT(   INOUT )   :: ErrMsg        ! Error message if ErrStat /= ErrID_None
 
-!      INTEGER(4)                         :: I             ! Generic index
       INTEGER(4)                         :: J             ! Generic index
       INTEGER(4)                         :: K             ! Generic index
       INTEGER(IntKi)                     :: N
-      REAL(ReKi)                         :: temp  
 
       N = Line%N  ! number of segments in this line (for code readability)
 
@@ -1495,7 +1500,6 @@ CONTAINS
                              WetWeight    , SeabedCD,    TenTol,     (N+1)     , &
                              LSNodes, LNodesX, LNodesZ , ErrStat2, ErrMsg2)
 
-
       IF (ErrStat2 == ErrID_None) THEN ! if it worked, use it
           ! Transform the positions of each node on the current line from the local
           !   coordinate system of the current line to the inertial frame coordinate
@@ -1666,46 +1670,74 @@ CONTAINS
          ZF     = REAL( ZF_In    , DbKi )
 
 
+         
+      !  HF and VF cannot be initialized to zero when a  portion of the line rests on the seabed and the anchor tension is nonzero
+         
+      ! Generate the initial guess values for the horizontal and vertical tensions
+      !   at the fairlead in the Newton-Raphson iteration for the catenary mooring
+      !   line solution.  Use starting values documented in: Peyrot, Alain H. and
+      !   Goulois, A. M., "Analysis Of Cable Structures," Computers & Structures,
+      !   Vol. 10, 1979, pp. 805-813:
+         XF2     = XF*XF
+         ZF2     = ZF*ZF
+
+         IF     ( XF           == 0.0_DbKi    )  THEN ! .TRUE. if the current mooring line is exactly vertical
+            Lamda0 = 1.0D+06
+         ELSEIF ( L <= SQRT( XF2 + ZF2 ) )  THEN ! .TRUE. if the current mooring line is taut
+            Lamda0 = 0.2_DbKi
+         ELSE                                    ! The current mooring line must be slack and not vertical
+            Lamda0 = SQRT( 3.0_DbKi*( ( L**2 - ZF2 )/XF2 - 1.0_DbKi ) )
+         ENDIF
+
+         HF = ABS( 0.5_DbKi*W*  XF/     Lamda0      )
+         VF =      0.5_DbKi*W*( ZF/TANH(Lamda0) + L )         
+                                    
 
             ! Abort when there is no solution or when the only possible solution is
             !   illogical:
 
-         IF (    Tol <= 0.0_DbKi )  THEN   ! .TRUE. when the convergence tolerance is specified incorrectly
+         IF (    Tol <= EPSILON(TOL) )  THEN   ! .TRUE. when the convergence tolerance is specified incorrectly
            ErrStat = ErrID_Warn
            ErrMsg = ' Convergence tolerance must be greater than zero in routine Catenary().'
-
+           return
          ELSEIF ( XF <  0.0_DbKi )  THEN   ! .TRUE. only when the local coordinate system is not computed correctly
            ErrStat = ErrID_Warn
            ErrMsg =  ' The horizontal distance between an anchor and its'// &
                          ' fairlead must not be less than zero in routine Catenary().'
+           return
 
          ELSEIF ( ZF <  0.0_DbKi )  THEN   ! .TRUE. if the fairlead has passed below its anchor
            ErrStat = ErrID_Warn
            ErrMsg =  ' A fairlead has passed below its anchor.'
+           return
 
          ELSEIF ( L  <= 0.0_DbKi )  THEN   ! .TRUE. when the unstretched line length is specified incorrectly
            ErrStat = ErrID_Warn
            ErrMsg =  ' Unstretched length of line must be greater than zero in routine Catenary().'
+           return
 
          ELSEIF ( EA <= 0.0_DbKi )  THEN   ! .TRUE. when the unstretched line length is specified incorrectly
            ErrStat = ErrID_Warn
            ErrMsg =  ' Extensional stiffness of line must be greater than zero in routine Catenary().'
+           return
 
          ELSEIF ( W  == 0.0_DbKi )  THEN   ! .TRUE. when the weight of the line in fluid is zero so that catenary solution is ill-conditioned
            ErrStat = ErrID_Warn
            ErrMsg = ' The weight of the line in fluid must not be zero. '// &
                          ' Routine Catenary() cannot solve quasi-static mooring line solution.'
+           return
 
 
          ELSEIF ( W  >  0.0_DbKi )  THEN   ! .TRUE. when the line will sink in fluid
 
             LMax      = XF - EA/W + SQRT( (EA/W)*(EA/W) + 2.0_DbKi*ZF*EA/W )  ! Compute the maximum stretched length of the line with seabed interaction beyond which the line would have to double-back on itself; here the line forms an "L" between the anchor and fairlead (i.e. it is horizontal along the seabed from the anchor, then vertical to the fairlead)
 
-            IF ( ( L  >=  LMax   ) .AND. ( CB >= 0.0_DbKi ) )  &  ! .TRUE. if the line is as long or longer than its maximum possible value with seabed interaction
-           ErrStat = ErrID_Warn
-           ErrMsg =  ' Unstretched mooring line length too large. '// &
+            IF ( ( L  >=  LMax   ) .AND. ( CB >= 0.0_DbKi ) )  then  ! .TRUE. if the line is as long or longer than its maximum possible value with seabed interaction
+               ErrStat = ErrID_Warn
+               ErrMsg =  ' Unstretched mooring line length too large. '// &
                             ' Routine Catenary() cannot solve quasi-static mooring line solution.'
-
+               return
+            END IF
 
          ENDIF
 
@@ -1831,9 +1863,19 @@ CONTAINS
 
             ! Compute the determinant of the Jacobian matrix and the incremental
             !   tensions predicted by Newton-Raphson:
-
+            
+            
             DET = dXFdHF*dZFdVF - dXFdVF*dZFdHF
+            
+            if ( EqualRealNos( DET, 0.0_DbKi ) ) then               
+!bjj: there is a serious problem with the debugger here when DET = 0
+                ErrStat = ErrID_Warn
+                ErrMsg =  ' Iteration not convergent (DET is 0). '// &
+                          ' Routine Catenary() cannot solve quasi-static mooring line solution.'
+                return
+            endif
 
+               
             dHF = ( -dZFdVF*EXF + dXFdVF*EZF )/DET    ! This is the incremental change in horizontal tension at the fairlead as predicted by Newton-Raphson
             dVF = (  dZFdHF*EXF - dXFdHF*EZF )/DET    ! This is the incremental change in vertical   tension at the fairlead as predicted by Newton-Raphson
 
@@ -1841,7 +1883,6 @@ CONTAINS
             dVF = dVF*( 1.0_DbKi - Tol*I )            ! Reduce dHF by factor (between 1 at I = 1 and 0 at I = MaxIter) that reduces linearly with iteration count to ensure that we converge on a solution even in the case were we obtain a nonconvergent cycle about the correct solution (this happens, for example, if we jump to quickly between a taut and slack catenary)
 
             dHF = MAX( dHF, ( Tol - 1.0_DbKi )*HF )   ! To avoid an ill-conditioned situation, make sure HF does not go less than or equal to zero by having a lower limit of Tol*HF [NOTE: the value of dHF = ( Tol - 1.0_DbKi )*HF comes from: HF = HF + dHF = Tol*HF when dHF = ( Tol - 1.0_DbKi )*HF]
-
 
             ! Check if we have converged on a solution, or restart the iteration, or
             !   Abort if we cannot find a solution:
@@ -1924,7 +1965,7 @@ CONTAINS
             DO I = 1,N  ! Loop through all nodes where the line position and tension are to be computed
 
                IF ( ( s(I) <  0.0_DbKi ) .OR. ( s(I) >  L ) )  THEN
-                  ErrStat = ErrID_Warn
+                 ErrStat = ErrID_Warn
                  ErrMsg = ' All line nodes must be located between the anchor ' &
                                  //'and fairlead (inclusive) in routine Catenary().'
                  RETURN
