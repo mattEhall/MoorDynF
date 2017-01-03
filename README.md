@@ -8,7 +8,7 @@ MoorDyn is a lumped-mass mooring line model for simulating the dynamics of moori
 
 This page hosts the Fortran implementation of MoorDyn, which has been developed following the [FAST Modularization Framework](https://nwtc.nrel.gov/FAST-Developers).  It is included as a module in [FAST v8](https://nwtc.nrel.gov/FAST8).
 
-For the C++ implementation of MoorDyn, see <http://www.matt-hall.ca/MoorDyn>.  "MoorDyn C" can be compiled as a dynamically-linked library and features simpler functions for easy coupling with models or scripts coded in C/C++, Fortran, Matlab/Simulink, etc.  It has recently been integrated into [WEC-Sim](https://nwtc.nrel.gov/WEC-Sim).
+For the C++ implementation of MoorDyn, see <http://www.matt-hall.ca/moordyn>.  "MoorDyn C" can be compiled as a dynamically-linked library and features simpler functions for easy coupling with models or scripts coded in C/C++, Fortran, Matlab/Simulink, etc.  It has recently been integrated into [WEC-Sim](https://nwtc.nrel.gov/WEC-Sim).
 
 Both forms of MoorDyn feature the same underlying mooring model, use similar input and output conventions, and are being updated and improved in parallel.  They follow the same version numbering, with a "C" or "F" suffix for differentiation.
 
