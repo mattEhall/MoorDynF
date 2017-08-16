@@ -15,7 +15,7 @@ Both forms of MoorDyn feature the same underlying mooring model, use similar inp
 
 ## Documentation
 
-The [User's Guide](http://www.matt-hall.ca/files/MoorDyn-Users-Guide-2015-12-15.pdf) (updated Dec. 15, 2015) provides guidance for using MoorDyn and a basic description of the model.  This covers both the Fortran and C++ versions.
+The [User's Guide](http://www.matt-hall.ca/files/MoorDyn Users Guide 2015-12-15.pdf) (updated Dec. 15, 2015) provides guidance for using MoorDyn and a basic description of the model.  This covers both the Fortran and C++ versions.
 
 More detail about the mooring line model and some validation against 1:50-scale floating wind turbine test data is available in the paper [M. Hall and A. Goupee, “Validation of a lumped-mass mooring line model with DeepCwind semisubmersible model test data,” Ocean Engineering, vol. 104, pp. 590–603, Aug. 2015.](http://www.sciencedirect.com/science/article/pii/S0029801815002279)
 
